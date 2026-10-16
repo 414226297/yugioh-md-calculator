@@ -1,0 +1,22 @@
+{
+  "name": "md-cannon-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "个人使用的联栗炮助手 Windows 原型",
+  "type": "module",
+  "main": "dist/desktop/main.js",
+  "scripts": {
+    "build": "tsc && node scripts/copy-ui.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "electron .",
+    "test": "node --test tests/*.test.mjs",
+    "test:ui": "node scripts/test-ui.mjs",
+    "test:all": "pnpm run build && pnpm test && pnpm run test:ui"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "electron": "^44.7.2",
+    "playwright": "^1.64.1",
+    "typescript": "^7.0.2"
+  }
+}

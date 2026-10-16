@@ -1,0 +1,6 @@
+node_modules/
+dist/
+local-data/
+test-results/
+*.log
+.pnpm-store/

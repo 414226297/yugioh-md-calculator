@@ -1,0 +1,12 @@
+import {createRequire} from 'node:module';
+import {spawn} from 'node:child_process';
+import {existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const require=createRequire(import.meta.url);
+if(!existsSync(new URL('../dist/desktop/main.js',import.meta.url)))throw Error('缺少构建结果，请先运行 pnpm run build');
+const executable=require('electron');
+const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;delete env.MD_TEST_MODE;
+const child=spawn(executable,[root],{cwd:root,env,detached:true,stdio:'ignore',windowsHide:false});
+child.on('error',error=>{console.error(error.message);process.exitCode=1;});
+child.unref();
