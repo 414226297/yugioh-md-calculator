@@ -1,24 +1,30 @@
-import {app,BrowserWindow,ipcMain,screen,net} from 'electron';
+import {app,BrowserWindow,ipcMain,screen} from 'electron';
 import path from 'node:path';import {fileURLToPath} from 'node:url';
-import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
+import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:fs';
 import {DuelStore} from '../domain/store.js';import {validateDeck,type Snapshot} from '../domain/model.js';
-import {parseCatalog} from '../data/catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig} from './config.js';
+import {downloadCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
+import {fetchCatalogResponse} from './catalog-fetch.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
-const dataDir=process.env.MD_TEST_MODE==='1'?path.join(root,'test-results','app-data'):path.join(root,'local-data');
+const dataDir=dataDirectory(root,process.env.APPDATA??app.getPath('appData'),app.isPackaged,process.env.MD_TEST_MODE==='1');
 mkdirSync(dataDir,{recursive:true});app.setPath('userData',path.join(dataDir,'electron'));
 const store=new DuelStore();let win:BrowserWindow;let host:ReaderHost;let config=defaults();let notice='';let catalogMessage='';let downloading=false;
 const read=(name:string)=>{try{return JSON.parse(readFileSync(path.join(dataDir,name),'utf8'));}catch{return null;}};
 function save(name:string,value:unknown){const file=path.join(dataDir,name);writeFileSync(file+'.tmp',JSON.stringify(value,null,2));renameSync(file+'.tmp',file);}
 function payload(){return {...store.view(),notice,catalogMessage,config};}
 function publish(){if(win&&!win.isDestroyed())win.webContents.send('state',payload());}
-function begin(){if(process.env.MD_TEST_MODE==='1')return;store.paused=false;store.error='';host.start({MD_SCRY_PATH:config.modulePath,MD_UNITY_VERSION:config.unityVersion,MD_INTERVAL:String(config.interval)});}
+function begin(){
+  if(process.env.MD_TEST_MODE==='1')return;store.paused=false;store.error='';
+  config={...config,modulePath:resolveModulePath(config.modulePath)};
+  if(!path.isAbsolute(config.modulePath)||!existsSync(config.modulePath)){
+    host.stop();store.error='未找到本机读取模块。请安装兼容的 Untapped Companion，或在设置中填写本机 .node 模块路径后重新连接。';publish();return;
+  }
+  host.start({MD_SCRY_PATH:config.modulePath,MD_UNITY_VERSION:config.unityVersion,MD_INTERVAL:String(config.interval)});
+}
 async function updateCatalog(){
   if(downloading)return;downloading=true;catalogMessage='正在获取卡片属性';publish();
   try{
-    const response=await net.fetch('https://ygomjson.untapped.gg/v1/latest/en-us/cards.json',{signal:AbortSignal.timeout(20000)});
-    if(!response.ok||new URL(response.url).hostname!=='ygomjson.untapped.gg')throw Error(`下载失败 ${response.status}`);
-    const catalog=parseCatalog(await response.json());if(Object.keys(catalog).length<1000)throw Error('卡片数据库不完整');
-    store.catalog=catalog;save('catalog.json',{source:response.url,fetchedAt:Date.now(),cards:catalog});catalogMessage='卡片属性已更新';
+    const result=await downloadCatalog(fetchCatalogResponse);
+    store.catalog=result.cards;save('catalog.json',{source:result.source,fetchedAt:Date.now(),cards:result.cards});catalogMessage='卡片属性已更新';
   }catch(e){catalogMessage=`属性更新失败，${Object.keys(store.catalog).length?'继续使用本地缓存':'需要联网重试'}：${String(e)}`;}
   finally{downloading=false;publish();}
 }
@@ -54,7 +60,7 @@ app.whenReady().then(async()=>{
         case 'catalog':await updateCatalog();break;
         case 'config':config=validateConfig(value);save('config.json',config);win.setSize(config.width,config.height);begin();break;
         case 'dismissNotice':notice='';break;
-        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.1.0',status:store.snapshot?.status,error:store.error,logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
+        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.1.1',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
         default:throw Error('未知操作');
       }
       publish();return {ok:true};

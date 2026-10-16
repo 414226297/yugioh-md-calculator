@@ -4,3 +4,13 @@ local-data/
 test-results/
 *.log
 .pnpm-store/
+release/
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.p12
+*.key
+*.tmp
+*.bak

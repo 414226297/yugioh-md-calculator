@@ -7,6 +7,6 @@ try {
   await win.waitForLoadState('domcontentloaded');
   assert.equal(await win.title(), '联栗炮助手');
   assert.equal(await win.evaluate(() => typeof window.require), 'undefined');
-  assert.equal(await win.evaluate(() => window.cannon.version), '0.1.0');
+  assert.equal(await win.evaluate(() => window.cannon.version), '0.1.1');
   console.log('PASS desktop launch, isolated renderer and preload bridge');
 } finally { await app.close(); }

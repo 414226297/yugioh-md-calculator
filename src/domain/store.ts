@@ -43,6 +43,6 @@ export class DuelStore {
     const missing=!!this.deck&&Object.keys(this.deck.extra).some(id=>!this.catalog[Number(id)]);
     const blocked=stale||s?.status!=='duel'||missing||this.boundSession!==s?.session||!!s?.busy;
     const result=blocked?{status:'uncertain' as const,plans:[],reason:this.error||(this.paused?'读取已暂停':stale?'数据过期，等待更新':s?.status==='waiting'?'等待 MD 启动':s?.status!=='duel'?'等待进入对局':missing?'卡片属性尚未获取完整':this.boundSession!==s?.session?'请确认本次使用的牌组':'场面处理中，等待稳定')}:solve(counts,monsters,inventory,this.catalog);
-    return {snapshot:s,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
+    return {snapshot:s,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckAttributesReady:!missing,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
   }
 }

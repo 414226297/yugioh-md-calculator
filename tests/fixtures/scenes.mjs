@@ -16,7 +16,7 @@ export const cards = [
   {id:19921,name:'联栗炮固定式',kind:'other',value:0},
 ];
 export const catalog = Object.fromEntries(cards.map(c=>[c.id,c]));
-export const deck = {id:'11836547', name:'白银城', readAt:1, main:Object.fromEntries(Array.from({length:40},(_,i)=>[30000+i,1])), extra:{4740:1,9612:1,10942:1,13825:2,17645:2,17383:1,17384:1,17385:1,17796:1,17746:1,14910:1,21380:1,21381:1}};
+export const deck = {id:'fixture-deck-001', name:'白银城（测试样例）', readAt:1, main:Object.fromEntries(Array.from({length:40},(_,i)=>[30000+i,1])), extra:{4740:1,9612:1,10942:1,13825:2,17645:2,17383:1,17384:1,17385:1,17796:1,17746:1,14910:1,21380:1,21381:1}};
 export const inventory = () => ({extra:Object.entries(deck.extra).map(([id,count])=>({id:+id,count,face:'up'})),banished:[],quality:'confirmed',reasons:[]});
 export const scene = () => ({status:'duel',session:'test-game-1',timestamp:Date.now(),counts:{myHand:1,opponentHand:2,myField:4,opponentField:2},monsters:[{uid:87,kind:'rank',value:5,faceUp:true}],myTeam:0,extraCount:15,banishedCount:0,moves:[],logLength:11,completeLog:true,deck:null,busy:false});
 export const move = (index,id,from,to,extra={}) => ({key:`${index}:0`,index,cardId:id,player:0,targetPlayer:0,from,to,action:to===17?18:33,face:'up',affectsInventory:true,...extra});

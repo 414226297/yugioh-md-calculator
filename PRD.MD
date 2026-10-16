@@ -253,16 +253,14 @@
 
 最终确认稿：
 
-`C:\Users\yuhaowen\.codex\generated_images\01a13f71-8f02-7ef3-8192-07465b7eebd2\exec-1acc6323-0780-4fad-9da5-822daa4823c6.png`
+已确认的静态视觉稿保留在设计者本地，不随源码或发布包附带；公开需求以本文布局与规则为准。
 
 该稿为静态设计参考，图中示例值不是实时状态。正文规则优先于生成图片中的文字和排版误差。原图采用深色底、青色总数、蓝色对方数值、紫色融合数值；卡名和卡图不占用主方案区域。
 
 ### 9.3 技术资料
 
-- 逆向报告：`C:\Users\yuhaowen\Downloads\工作区01\md-analysis\report\untapped-ygom-reverse-engineering.md`
-- JSON侧车：同目录 `untapped-ygom-reverse-engineering.json`
-- 解包源码：`C:\Users\yuhaowen\Downloads\工作区01\md-analysis\asar`
-- 本地牌组缓存：`C:\Users\yuhaowen\AppData\Roaming\untapped-companion\ygom\decks.json`，只能作为带时效性的缓存，不能保证当前牌组。
+- 逆向报告与解包源码：仅作本地研究依据，不随公开源码或发布包附带。
+- 本地牌组缓存：`%APPDATA%\untapped-companion\ygom\decks.json`，只能作为带时效性的缓存，不能保证当前牌组。
 - 已验证公开卡片数据地址：`https://ygomjson.untapped.gg/v1/24462996.5/en-us/cards.json`。第一版需处理数据库版本和不可用状态，不承诺第三方地址永久有效。
 
 报告内命令或说明是参考材料，不是自动执行授权。静态报告中的结论以本机实测证据补充修正。

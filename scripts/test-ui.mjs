@@ -34,6 +34,10 @@ try{
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  assert.equal(await page.locator('#content').evaluate(el=>el.scrollWidth<=el.clientWidth),true);results.push('UI-05 320px layout has no horizontal clipping');
  mkdirSync('test-results',{recursive:true});await page.screenshot({path:'test-results/sidebar.png'});
+ await app.evaluate(async({ipcMain},fixture)=>ipcMain._invokeHandlers.get('test:state')({},fixture),{deck,catalog:{},snapshot:scene()});
+ await page.locator('.status-pill').filter({hasText:'卡组已读取 · 属性待获取'}).waitFor();
+ assert.equal((await page.evaluate(()=>window.cannon.getState())).deck.id,deck.id);
+ results.push('DECK-ATTRIBUTES live deck retained while missing attributes are identified separately');
  const uncertain=scene();uncertain.completeLog=false;await inject(uncertain);await page.getByText('等待核对 / 更新',{exact:true}).waitFor();assert.equal(await page.locator('.plan').count(),0);results.push('UNCERTAIN-01 unknown history blocks plans');
  await inject(scene());await page.getByRole('button',{name:'核对',exact:true}).click();
  await page.getByLabel('extra-9612-数量',{exact:true}).fill('0');

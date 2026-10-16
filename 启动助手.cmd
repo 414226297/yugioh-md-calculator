@@ -1,9 +1,10 @@
 @echo off
 cd /d "%~dp0"
-set "MD_NODE=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
-if exist "%MD_NODE%" (
-  "%MD_NODE%" scripts\launch.mjs
-) else (
-  node scripts\launch.mjs
+where node >nul 2>nul
+if errorlevel 1 (
+  echo Node.js is required for the source checkout. Use the Windows x64 portable ZIP to run without Node.js.
+  pause
+  exit /b 1
 )
+node scripts\launch.mjs
 if errorlevel 1 pause
