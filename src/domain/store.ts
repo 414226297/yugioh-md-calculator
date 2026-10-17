@@ -9,10 +9,29 @@ export class DuelStore {
   deckManual=false;
   private deckPrepared=false;
   accept(s:Snapshot){
+    const newDuel=s.status==='duel'&&!!s.session&&s.session!==this.lastSession;
     if(s.status==='duel'&&s.session!==this.lastSession){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=this.deckPrepared&&this.deck?s.session:null;this.deckPrepared=false;this.lastSession=s.session;}
     if(s.status==='menu'||s.status==='waiting'){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=null;this.lastSession=null;}
     if(s.status==='waiting'){this.deckPrepared=false;this.deckVerified=false;}
-    this.snapshot=s;if(s.deck&&(!this.deckManual||s.deck.id!==this.deck?.id)){this.deck=s.deck;this.deckVerified=true;this.deckManual=false;this.deckPrepared=s.status==='menu';}this.error=s.status==='error'?(s.reason??'读取失败'):'';
+    this.snapshot=s;
+    if(s.status==='menu'&&s.deckSource==='preparation'){
+      if(s.deck&&validateDeck(s.deck)&&s.deck.id===s.deckSelection?.id&&s.deck.revision===s.deckSelection.revision){
+        this.deck=s.deck;this.deckVerified=true;this.deckManual=false;this.deckPrepared=true;
+      }else{
+        this.deck=null;this.deckVerified=false;this.deckManual=false;this.deckPrepared=false;
+      }
+    }else if(s.status==='duel'&&s.deckSource==='duel'&&s.session){
+      if(!validateDeck(s.deck)){
+        this.boundSession=null;this.deckVerified=false;this.deckPrepared=false;this.checkpoint=undefined;
+      }else if(newDuel||!this.deckManual){
+        const composition=(d:Deck|null)=>d?JSON.stringify([d.id,...['main','extra'].map(p=>Object.entries(d[p as 'main'|'extra']).sort(([a],[b])=>+a-+b))]):'';
+        if(composition(this.deck)!==composition(s.deck))this.checkpoint=undefined;
+        this.deck=s.deck;this.deckVerified=true;this.deckManual=false;this.deckPrepared=false;this.boundSession=s.session;
+      }
+    }else if(s.deck&&validateDeck(s.deck)&&(!this.deckManual||s.deck.id!==this.deck?.id)){
+      this.deck=s.deck;this.deckVerified=true;this.deckManual=false;this.deckPrepared=s.status==='menu';
+    }
+    this.error=s.status==='error'?(s.reason??'读取失败'):'';
   }
   confirmDeck(){if(!this.deck)throw Error('尚未读取牌组');this.deckVerified=true;this.boundSession=this.snapshot?.session??null;this.deckPrepared=this.snapshot?.status==='menu';}
   setDeck(deck:Deck){if(!validateDeck(deck))throw Error('牌组须为40至60张主牌组、最多15张额外，每种卡最多3张');

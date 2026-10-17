@@ -39,6 +39,15 @@ try{
  assert.equal((await page.evaluate(()=>window.cannon.getState())).deck.id,deck.id);
  results.push('DECK-ATTRIBUTES live deck retained while missing attributes are identified separately');
  const uncertain=scene();uncertain.completeLog=false;await inject(uncertain);await page.getByText('等待核对 / 更新',{exact:true}).waitFor();assert.equal(await page.locator('.plan').count(),0);results.push('UNCERTAIN-01 unknown history blocks plans');
+ const selected={...deck,revision:10};
+ const prepare={...scene(),status:'menu',session:null,deckSource:'preparation',deck:selected,deckSelection:{id:deck.id,name:deck.name,revision:10}};
+ await app.evaluate(async({ipcMain},fixture)=>ipcMain._invokeHandlers.get('test:state')({},fixture),{deck:null,catalog,sequence:[prepare,scene(),prepare,{...scene(),session:'repeat'}]});
+ await page.locator('.status-pill').filter({hasText:'卡组获取成功'}).waitFor();assert.equal(await page.locator('.plan').count(),1);
+ results.push('PREPARATION repeated duels bind automatically without editor or confirmation');
+ await app.evaluate(async({ipcMain},fixture)=>ipcMain._invokeHandlers.get('test:state')({},fixture),{deck:null,catalog,sequence:[{...prepare,deck:null,deckSelection:{id:'new',name:'new',revision:11}}]});
+ await page.locator('.status-pill').filter({hasText:'已识别牌组 · 卡表待获取'}).waitFor();assert.equal(await page.locator('.plan').count(),0);
+ assert.equal((await page.evaluate(()=>window.cannon.getState())).deck,null);
+ results.push('PREPARATION unavailable new deck clears previous cards and readiness');
  await inject(scene());await page.getByRole('button',{name:'核对',exact:true}).click();
  await page.getByLabel('extra-9612-数量',{exact:true}).fill('0');
  await page.getByRole('button',{name:'确认库存',exact:true}).click();

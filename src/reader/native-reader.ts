@@ -1,22 +1,8 @@
 import { createRequire } from 'node:module';
 import { emptyCounts, type Deck, type Move, type Snapshot } from '../domain/model.js';
-type Ref = { get: (key: string) => any; getClassName: () => string; getBaseAddress?: () => number };
-export function list(ref: Ref | null, max = 10000): any[] {
-  if (!ref) return [];
-  const n = ref.get('_size');
-  if (!Number.isInteger(n) || n < 0 || n > max) throw Error('列表长度异常，需要重新读取');
-  const items = ref.get('_items');
-  return Array.from({length:n},(_,i)=>items.at(i));
-}
-export function dictionary(ref: Ref): Map<string, any> {
-  let n, entries;
-  try { n=ref.get('_count'); entries=ref.get('_entries'); }
-  catch { n=ref.get('count'); entries=ref.get('entries'); }
-  if (!Number.isInteger(n)||n<0||n>10000) throw Error('字典长度异常');
-  const result = new Map<string, any>();
-  for(let i=0;i<n;i++) { const e=entries.at(i); const key=e.get('key'); if(key!==null&&key!==undefined)result.set(String(key),e.get('value')); }
-  return result;
-}
+import {dictionary,list,type Ref} from './collections.js';
+import {readPreparation} from './preparation.js';
+export {dictionary,list} from './collections.js';
 const num = (v: unknown) => { if(!Number.isInteger(v) || (v as number)<0 || (v as number)>1000)throw Error('读数异常');return v as number; };
 export function cardId(v: unknown): number { if(!Number.isInteger(v)||(v as number)<=0||(v as number)>10000000)throw Error('卡片编号异常');return v as number; }
 export function decodeAction(a: Ref, index: number, sub: number, myTeam: number, runningCard: number): Move | null {
@@ -58,6 +44,7 @@ export class SceneStability {
 export class NativeReader {
   private context: any;
   private stability = new SceneStability();
+  private preparationSeen=false;
   constructor(modulePath: string, private pid: number, unityVersion: string) {
     const native=createRequire(import.meta.url)(modulePath);
     this.context=new native.Il2CppScry(native.Scry.connect(pid),{enumerateProperties:false}).getMetadataContext(unityVersion,'DuelClient');
@@ -71,6 +58,23 @@ export class NativeReader {
       deck={id:String(current.get('m_DeckID')),name:current.get('m_DeckName'),main:counts('m_MainDeckCards'),extra:counts('m_ExtraDeckCards'),readAt:Date.now()};
     }
     const result: Snapshot={status:'menu',session:null,timestamp:Date.now(),counts:emptyCounts(),monsters:[],myTeam:0,extraCount:null,banishedCount:null,moves:[],logLength:0,completeLog:false,deck};
+    if(deck)result.deckSource='editor';
+    // Capture server-backed contents while an editor/selection child view is open.
+    // Do not stamp the editor's potentially unsaved card list with a saved revision.
+    const preparation=views.find(v=>v.getClassName()==='YgomGame.Colosseum.ColosseumInfoViewController');
+    if(preparation&&preparation!==current){
+      try{const saved=readPreparation(preparation,c.getClass('YgomSystem.Utility.ClientWork').get('s_data')).deck;if(saved)result.cachedPreparationDeck=saved;}catch{}
+    }
+    if(current?.getClassName()==='YgomGame.Colosseum.ColosseumInfoViewController'){
+      this.preparationSeen=true;
+      result.deckSource='preparation';
+      try{Object.assign(result,readPreparation(current,c.getClass('YgomSystem.Utility.ClientWork').get('s_data')));}
+      catch{result.deck=null;result.deckSelection=null;result.reason='准备页面牌组尚未读取完整，等待更新';}
+    }else if(this.preparationSeen&&!deck&&['YgomGame.Menu.HomeViewController','YgomGame.Colosseum.ColosseumViewController','YgomGame.DeckSelectViewController2','YgomGame.DeckBrowserViewController'].includes(current?.getClassName())){
+      result.deckSource='preparation';result.deckSelection=null;result.deck=null;
+      result.reason='等待对战准备页面确认当前牌组';
+      this.preparationSeen=views.some(v=>v.getClassName()==='YgomGame.Colosseum.ColosseumInfoViewController');
+    }
     const d=c.getClass('YgomGame.Duel.DuelClient').get('instance');
     if(!d||!current?.getClassName()?.startsWith('YgomGame.Duel.')){this.stability=new SceneStability();return result;}
     const w=d.get('effectWorker'),g=w.get('goManager'),f=g.get('duelField'),h=d.get('handCardManager'),log=d.get('duelHUD').get('duellog');

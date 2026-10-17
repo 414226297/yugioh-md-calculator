@@ -4,12 +4,18 @@ import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:f
 import {DuelStore} from '../domain/store.js';import {validateDeck,type Snapshot} from '../domain/model.js';
 import {downloadCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
 import {fetchCatalogResponse} from './catalog-fetch.js';
+import {resolveSelectedDeck} from '../domain/deck-cache.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const dataDir=dataDirectory(root,process.env.APPDATA??app.getPath('appData'),app.isPackaged,process.env.MD_TEST_MODE==='1');
 mkdirSync(dataDir,{recursive:true});app.setPath('userData',path.join(dataDir,'electron'));
 const store=new DuelStore();let win:BrowserWindow;let host:ReaderHost;let config=defaults();let notice='';let catalogMessage='';let downloading=false;
 const read=(name:string)=>{try{return JSON.parse(readFileSync(path.join(dataDir,name),'utf8'));}catch{return null;}};
 function save(name:string,value:unknown){const file=path.join(dataDir,name);writeFileSync(file+'.tmp',JSON.stringify(value,null,2));renameSync(file+'.tmp',file);}
+let knownDecks:Record<string,unknown>={};let lastDeckSaved='';
+function companionDecks(){
+  if(process.env.MD_TEST_MODE==='1')return null;
+  try{return JSON.parse(readFileSync(path.join(process.env.APPDATA??app.getPath('appData'),'untapped-companion','ygom','decks.json'),'utf8'));}catch{return null;}
+}
 function payload(){return {...store.view(),notice,catalogMessage,config};}
 function publish(){if(win&&!win.isDestroyed())win.webContents.send('state',payload());}
 function begin(){
@@ -31,6 +37,7 @@ async function updateCatalog(){
 app.whenReady().then(async()=>{
   try{config=validateConfig({...config,...read('config.json')});}catch{notice='设置文件无效，已使用默认设置';}
   const cachedDeck=read('deck.json');if(cachedDeck&&validateDeck(cachedDeck))store.deck=cachedDeck;
+  const cachedDecks=read('decks.json');if(cachedDecks&&typeof cachedDecks==='object'&&!Array.isArray(cachedDecks))knownDecks=cachedDecks;
   const cached=read('catalog.json');if(cached?.cards)store.catalog=cached.cards;
   const area=screen.getPrimaryDisplay().workArea;
   win=new BrowserWindow({width:Math.min(config.width,area.width),height:Math.min(config.height,area.height),minWidth:320,minHeight:480,x:area.x+area.width-Math.min(config.width,area.width),y:area.y,frame:false,backgroundColor:'#1e2228',title:'联栗炮助手',alwaysOnTop:false,
@@ -40,7 +47,23 @@ app.whenReady().then(async()=>{
   win.webContents.session.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
   host=new ReaderHost(fileURLToPath(new URL('../reader/worker.js',import.meta.url)),value=>{
     const s=value as Snapshot;if(!s||!['waiting','menu','duel','error'].includes(s.status))return;
-    store.accept(s);if(s.deck&&validateDeck(s.deck))save('deck.json',s.deck);publish();
+    const captured=s.cachedPreparationDeck;
+    if(captured&&validateDeck(captured)&&Number.isSafeInteger(captured.revision)&&captured.revision!>0){
+      const previous=knownDecks[captured.id];
+      if(JSON.stringify(previous&&{...previous as object,readAt:0})!==JSON.stringify({...captured,readAt:0})){
+        knownDecks[captured.id]=captured;save('decks.json',knownDecks);
+      }
+    }
+    if(s.deckSource==='preparation'&&s.deckSelection&&!s.deck)s.deck=resolveSelectedDeck(s.deckSelection,knownDecks,companionDecks());
+    store.accept(s);
+    if(s.deck&&validateDeck(s.deck)){
+      const signature=JSON.stringify({...s.deck,readAt:0});
+      if(signature!==lastDeckSaved){
+        save('deck.json',s.deck);lastDeckSaved=signature;
+        if(s.deck.revision!==undefined){knownDecks[s.deck.id]=s.deck;save('decks.json',knownDecks);}
+      }
+    }
+    publish();
   },reason=>{store.error=reason;publish();});
   ipcMain.handle('state',()=>payload());
   ipcMain.handle('command',async(event,command:string,value:any)=>{
@@ -60,7 +83,7 @@ app.whenReady().then(async()=>{
         case 'catalog':await updateCatalog();break;
         case 'config':config=validateConfig(value);save('config.json',config);win.setSize(config.width,config.height);begin();break;
         case 'dismissNotice':notice='';break;
-        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.1.1',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
+        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.1.2',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
         default:throw Error('未知操作');
       }
       publish();return {ok:true};

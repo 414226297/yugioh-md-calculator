@@ -2,7 +2,8 @@ export type Kind = 'xyz' | 'fusion' | 'other';
 export type Quality = 'confirmed' | 'manual' | 'unknown';
 export interface Card { id: number; name: string; kind: Kind; value: number }
 export interface Stock { id: number; count: number; face: 'up' | 'down' | 'unknown' }
-export interface Deck { id: string; name: string; main: Record<string, number>; extra: Record<string, number>; readAt: number }
+export interface Deck { id: string; name: string; main: Record<string, number>; extra: Record<string, number>; readAt: number; revision?:number }
+export interface DeckSelection {id:string;name:string;revision:number;cacheId?:string;localizedName?:boolean}
 export interface Counts { myHand: number | null; opponentHand: number | null; myField: number | null; opponentField: number | null }
 export interface Monster { uid: number; kind: 'level' | 'rank' | 'none'; value: number | null; faceUp: boolean }
 export interface Move { key: string; index: number; action: number; cardId: number; player: number; from: number; to: number | null; targetPlayer: number | null; face: 'up' | 'down' | 'unknown'; affectsInventory: boolean }
@@ -12,6 +13,10 @@ export interface Snapshot {
   banishedCount: number | null; moves: Move[]; logLength: number;
   completeLog: boolean; deck: Deck | null; reason?: string; version?: string;
   busy?: boolean;
+  /** duel means the local player's initial deck was read from this duel's settings. */
+  deckSource?: 'editor' | 'duel' | 'preparation';
+  deckSelection?:DeckSelection|null;
+  cachedPreparationDeck?:Deck;
 }
 export interface Inventory { extra: Stock[]; banished: Stock[]; quality: Quality; reasons: string[] }
 export interface Plan { rank: number; level: number; targetKind: 'level' | 'rank'; target: number; returnRank: number; returnLevel: number; usesPrevious: boolean }
