@@ -2,7 +2,7 @@
 
 供个人使用的 Windows PC 版《游戏王 Master Duel》联栗炮计算器，以独立侧栏与游戏窗口并排显示。当前版本为 0.2.0，提供包含 Electron 运行环境的 Windows x64 便携 ZIP；自动读取仍依赖目标电脑上的兼容读取模块。
 
-本地最新版：`release/md-cannon-assistant-0.2.0-win-x64-1792390318951.zip`。完整解压后运行 `MD-Assistant.exe`；无需 Node.js。公开记录、紧凑300px侧栏、浅深主题均已包含。GitHub历史发行链接仍指向旧版本，本次未发布到GitHub。
+本地最新版：`release/md-cannon-assistant-0.2.0-win-x64-1792390318951.zip`。完整解压后运行 `MD-Assistant.exe`；无需 Node.js。公开记录、紧凑300px侧栏、浅深主题均已包含。[下载 v0.2.0 正式发行版](https://github.com/414226297/yugioh-md-calculator/releases/tag/v0.2.0)。
 
 ## 解决什么问题
 

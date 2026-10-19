@@ -231,3 +231,8 @@ SHA256：`f6c007b88d48df61eaf717e94e322aa20c7c878a5cbf4795937c5bb5c26cca5c`。
 - 产物release/md-cannon-assistant-0.2.0-win-x64-1792390318951.zip及.sha256；同名目录保留可直接运行的EXE。SHA256 ff2ca8e0443abfe372dc0be768c75f9b89837b603630d4131329a0d0eaeb02af。
 - 121项单元测试通过；此前23组UI通过。ZIP实际解压到中文空格路径后通过生产EXE启动、用户数据隔离、缺少读取模块提示、许可及无私人/开发数据检查。未连接游戏做本次打包检查。
 - 本次仅本地Git提交，无推送、Tag或GitHub Release；历史“未打包”说明已由本节覆盖。
+
+## 2026-10-19 v0.2.0已发布到GitHub
+
+- main功能提交8aab3e1及附注标签v0.2.0已推送。正式发行版：https://github.com/414226297/yugioh-md-calculator/releases/tag/v0.2.0 。
+- ZIP和SHA256附件均已上传；GitHub报告ZIP大小157823155字节，digest与本地ff2ca8e0443abfe372dc0be768c75f9b89837b603630d4131329a0d0eaeb02af完全一致。此前未发布及中断状态由本节覆盖。
