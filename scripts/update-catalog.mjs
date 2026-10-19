@@ -1,10 +1,7 @@
-import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
-import {parseCatalog} from '../dist/data/catalog.js';
-const url='https://ygomjson.untapped.gg/v1/latest/en-us/cards.json';
-const r=await fetch(url,{signal:AbortSignal.timeout(20000)});
-if(!r.ok||new URL(r.url).hostname!=='ygomjson.untapped.gg')throw Error(`数据库请求失败 ${r.status}`);
-const cards=parseCatalog(await r.json());if(Object.keys(cards).length<1000)throw Error('数据库不完整');
-mkdirSync('local-data',{recursive:true});writeFileSync('local-data/catalog.json',JSON.stringify({source:r.url,fetchedAt:Date.now(),cards}));
+import {mkdirSync,writeFileSync,readFileSync,renameSync} from 'node:fs';
+import {downloadCatalog} from '../dist/data/download-catalog.js';
+const {source,cards}=await downloadCatalog(fetch);
 const deck=JSON.parse(readFileSync('local-data/deck.json','utf8'));
 for(const id of Object.keys(deck.extra))if(!cards[id])throw Error(`卡片属性缺失 ${id}`);
+mkdirSync('local-data',{recursive:true});writeFileSync('local-data/catalog.json.tmp',JSON.stringify({source,fetchedAt:Date.now(),cards}));renameSync('local-data/catalog.json.tmp','local-data/catalog.json');
 console.log(`PASS catalog download: ${Object.keys(cards).length} cards; all ${Object.keys(deck.extra).length} extra card types mapped`);

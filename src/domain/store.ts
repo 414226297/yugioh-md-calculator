@@ -1,6 +1,8 @@
 import { countTotal, emptyCounts,validateDeck, type Card,type Counts,type Deck,type Inventory,type Monster,type Snapshot } from './model.js';
 import {rebuildInventory,validateStock,type Checkpoint} from './inventory.js';
 import {solve} from './solver.js';
+import {publicHand} from './public-hand.js';
+import {PublicHandTracker} from './public-hand-tracker.js';
 export class DuelStore {
   snapshot:Snapshot|null=null;deck:Deck|null=null;catalog:Record<number,Card>={};
   boundSession:string|null=null;overrides:Partial<Counts>={};monsterOverride:Monster[]|null=null;checkpoint?:Checkpoint;
@@ -8,8 +10,23 @@ export class DuelStore {
   deckVerified=false;
   deckManual=false;
   private deckPrepared=false;
+  private publicHands=new PublicHandTracker();
+  private publicHandMemory:Snapshot|null=null;
+  private handSignature='';
   accept(s:Snapshot){
     const newDuel=s.status==='duel'&&!!s.session&&s.session!==this.lastSession;
+    if(newDuel||s.status==='menu'||s.status==='waiting'){this.publicHands.reset();this.publicHandMemory=null;this.handSignature='';}
+    if(s.status==='duel'&&s.session){
+      const observation=s.publicHandObservation;
+      if(observation&&s.counts.opponentHand!==null){
+        // Unrelated field/turn animations must not toggle hand certainty.
+        const signature=JSON.stringify([s.counts.opponentHand,[...observation.cards].sort((a,b)=>a-b),observation.changes,s.opponentSetSlots]);
+        const publicHandBusy=!!s.busy&&signature!==this.handSignature;
+        this.handSignature=signature;
+        s={...s,publicHandBusy,publicHandEvents:this.publicHands.update(s.session,s.logLength,s.counts.opponentHand,observation.cards,observation.changes,s.timestamp,!publicHandBusy,s.opponentSetSlots,this.catalog)};
+      }
+      if(s.publicHandEvents)this.publicHandMemory=s;
+    }
     if(s.status==='duel'&&s.session!==this.lastSession){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=this.deckPrepared&&this.deck?s.session:null;this.deckPrepared=false;this.lastSession=s.session;}
     if(s.status==='menu'||s.status==='waiting'){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=null;this.lastSession=null;}
     if(s.status==='waiting'){this.deckPrepared=false;this.deckVerified=false;}
@@ -62,6 +79,8 @@ export class DuelStore {
     const missing=!!this.deck&&Object.keys(this.deck.extra).some(id=>!this.catalog[Number(id)]);
     const blocked=stale||s?.status!=='duel'||missing||this.boundSession!==s?.session||!!s?.busy;
     const result=blocked?{status:'uncertain' as const,plans:[],reason:this.error||(this.paused?'读取已暂停':stale?'数据过期，等待更新':s?.status==='waiting'?'等待 MD 启动':s?.status!=='duel'?'等待进入对局':missing?'卡片属性尚未获取完整':this.boundSession!==s?.session?'请确认本次使用的牌组':'场面处理中，等待稳定')}:solve(counts,monsters,inventory,this.catalog);
-    return {snapshot:s,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckAttributesReady:!missing,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
+    const handSnapshot=this.publicHandMemory??s;
+    const backrow={publicSlots:s?.status==='duel'?s.opponentPublicSlots??[]:[],count:s?.status==='duel'?s.opponentSetSlots?.length??null:null,cards:this.publicHands.setCards(),uncertain:stale||!s?.publicHandObservation||!!s.publicHandBusy||s.opponentSetSlots===undefined};
+    return {snapshot:s,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,backrow,publicHand:publicHand(handSnapshot,stale||handSnapshot!==s),stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckAttributesReady:!missing,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
   }
 }

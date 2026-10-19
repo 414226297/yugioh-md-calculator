@@ -2,8 +2,9 @@ import {app,BrowserWindow,ipcMain,screen} from 'electron';
 import path from 'node:path';import {fileURLToPath} from 'node:url';
 import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:fs';
 import {DuelStore} from '../domain/store.js';import {validateDeck,type Snapshot} from '../domain/model.js';
-import {downloadCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
+import {downloadCatalog,needsChineseCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
 import {fetchCatalogResponse} from './catalog-fetch.js';
+import {downloadCardDetail,type CardDetail} from '../data/card-detail.js';
 import {resolveSelectedDeck} from '../domain/deck-cache.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const dataDir=dataDirectory(root,process.env.APPDATA??app.getPath('appData'),app.isPackaged,process.env.MD_TEST_MODE==='1');
@@ -27,10 +28,10 @@ function begin(){
   host.start({MD_SCRY_PATH:config.modulePath,MD_UNITY_VERSION:config.unityVersion,MD_INTERVAL:String(config.interval)});
 }
 async function updateCatalog(){
-  if(downloading)return;downloading=true;catalogMessage='正在获取卡片属性';publish();
+  if(downloading)return;downloading=true;catalogMessage='正在获取中文卡名与卡片属性';publish();
   try{
     const result=await downloadCatalog(fetchCatalogResponse);
-    store.catalog=result.cards;save('catalog.json',{source:result.source,fetchedAt:Date.now(),cards:result.cards});catalogMessage='卡片属性已更新';
+    store.catalog=result.cards;save('catalog.json',{source:result.source,fetchedAt:Date.now(),cards:result.cards});catalogMessage='中文卡名与卡片属性已更新';
   }catch(e){catalogMessage=`属性更新失败，${Object.keys(store.catalog).length?'继续使用本地缓存':'需要联网重试'}：${String(e)}`;}
   finally{downloading=false;publish();}
 }
@@ -40,9 +41,8 @@ app.whenReady().then(async()=>{
   const cachedDecks=read('decks.json');if(cachedDecks&&typeof cachedDecks==='object'&&!Array.isArray(cachedDecks))knownDecks=cachedDecks;
   const cached=read('catalog.json');if(cached?.cards)store.catalog=cached.cards;
   const area=screen.getPrimaryDisplay().workArea;
-  win=new BrowserWindow({width:Math.min(config.width,area.width),height:Math.min(config.height,area.height),minWidth:320,minHeight:480,x:area.x+area.width-Math.min(config.width,area.width),y:area.y,frame:false,backgroundColor:'#1e2228',title:'联栗炮助手',alwaysOnTop:false,
+  win=new BrowserWindow({width:Math.min(config.width,area.width),height:Math.min(config.height,area.height),minWidth:300,minHeight:480,x:area.x+area.width-Math.min(config.width,area.width),y:area.y,frame:false,backgroundColor:'#1e2228',title:'MD助手',alwaysOnTop:false,
     webPreferences:{preload:fileURLToPath(new URL('./preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});
-  notice=notice||'请将 MD 放在左侧，助手放在右侧；空间不足时请调整游戏窗口。';
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
   host=new ReaderHost(fileURLToPath(new URL('../reader/worker.js',import.meta.url)),value=>{
@@ -66,6 +66,27 @@ app.whenReady().then(async()=>{
     publish();
   },reason=>{store.error=reason;publish();});
   ipcMain.handle('state',()=>payload());
+  const detailCache:Record<number,CardDetail>=read('card-details.json')??{};
+  const pendingDetails=new Map<number,Promise<CardDetail>>();
+  let testDetails:Record<number,CardDetail>={};
+  ipcMain.handle('card-detail',async(event,id:number)=>{
+    try{
+      if(event.sender!==win.webContents||!Number.isInteger(id))throw Error('无效来源或卡片编号');
+      const view=store.view(),hand=view.publicHand;
+      if(![...hand.cards,...hand.uncertainCards].some(c=>c.id===id)&&!view.backrow.cards.some(c=>c.candidates.includes(id)))throw Error('这张卡已不在公开记录中');
+      if(process.env.MD_TEST_MODE==='1'){
+        if(!testDetails[id])throw Error('测试资料不可用');
+        return {ok:true,detail:testDetails[id]};
+      }
+      const password=store.catalog[id]?.password;
+      if(!password)throw Error('卡片编号映射尚未获取，请在设置中更新卡片属性后重试');
+      if(detailCache[id]?.password===password)return {ok:true,detail:detailCache[id]};
+      let request=pendingDetails.get(id);
+      if(!request){request=downloadCardDetail(id,password,fetchCatalogResponse);pendingDetails.set(id,request);}
+      try{const detail=await request;detailCache[id]=detail;save('card-details.json',detailCache);return {ok:true,detail};}
+      finally{pendingDetails.delete(id);}
+    }catch(e){return {ok:false,error:e instanceof Error?e.message:String(e)};}
+  });
   ipcMain.handle('command',async(event,command:string,value:any)=>{
     if(event.sender!==win.webContents)throw Error('无效来源');
     try{
@@ -83,13 +104,14 @@ app.whenReady().then(async()=>{
         case 'catalog':await updateCatalog();break;
         case 'config':config=validateConfig(value);save('config.json',config);win.setSize(config.width,config.height);begin();break;
         case 'dismissNotice':notice='';break;
-        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.1.2',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
+        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.2.0',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
         default:throw Error('未知操作');
       }
       publish();return {ok:true};
     }catch(e){return {ok:false,error:e instanceof Error?e.message:String(e)};}
   });
   if(process.env.MD_TEST_MODE==='1')ipcMain.handle('test:state',(_e,fixture)=>{
+    if(fixture.cardDetails)testDetails=fixture.cardDetails;
     store.restore();store.error='';store.paused=false;store.deck=fixture.deck;store.catalog=fixture.catalog;
     if(fixture.sequence){for(const snapshot of fixture.sequence)store.accept(snapshot);}else{store.accept(fixture.snapshot);store.confirmDeck();}
     if(fixture.inventory)store.setInventory(fixture.inventory.extra,fixture.inventory.banished);
@@ -97,7 +119,7 @@ app.whenReady().then(async()=>{
   });
   await win.loadFile(fileURLToPath(new URL('../ui/index.html',import.meta.url)));
   begin();setInterval(publish,500).unref();
-  if(!Object.keys(store.catalog).length&&process.env.MD_TEST_MODE!=='1')void updateCatalog();
+  if((!Object.keys(store.catalog).length||needsChineseCatalog(cached)||!Object.values(store.catalog).some(c=>c.password&&c.category))&&process.env.MD_TEST_MODE!=='1')void updateCatalog();
 });
 app.on('window-all-closed',()=>{host?.stop();app.quit();});
 app.on('before-quit',()=>host?.stop());

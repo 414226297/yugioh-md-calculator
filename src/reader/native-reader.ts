@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { emptyCounts, type Deck, type Move, type Snapshot } from '../domain/model.js';
 import {dictionary,list,type Ref} from './collections.js';
 import {readPreparation} from './preparation.js';
+import {handChange,visibleHand,facedownBackrow,faceupBackrow,type HandChange} from './public-hand.js';
 export {dictionary,list} from './collections.js';
 const num = (v: unknown) => { if(!Number.isInteger(v) || (v as number)<0 || (v as number)>1000)throw Error('读数异常');return v as number; };
 export function cardId(v: unknown): number { if(!Number.isInteger(v)||(v as number)<=0||(v as number)>10000000)throw Error('卡片编号异常');return v as number; }
@@ -17,19 +18,26 @@ export function decodeAction(a: Ref, index: number, sub: number, myTeam: number,
 export function readActions(log: Ref, myTeam: number) {
   const base=list(log.get('m_LogBaseItemList'));
   const singles=list(log.get('m_DataList_ShowAction'),5000), batches=list(log.get('m_DataList_MoveMulti'),5000),chains=list(log.get('m_DataList_ShowChain'),5000);
-  const moves: Move[]=[];let runningCard=0;
+  const names=list(log.get('m_DataList_ShowCardName'),5000);
+  const moves: Move[]=[];const handChanges:HandChange[]=[];let runningCard=0;
   for(let i=0;i<base.length;i++) {
     const label=base[i].get('loglabel'), idx=base[i].get('dataindex');
     if(label==='ShowChain') {
       const chain=chains[idx];if(chain){ const type=chain.get('type'); if(type===1)runningCard=chain.get('cardid');else if(type===3)runningCard=0; }
     }
     if(label==='ShowTurn'||label==='ShowPhase')runningCard=0;
+    // Turn/phase/text presentation is not evidence of a hand movement.
+    if(!['ShowAction','CardMoveMulti','SeparateLine','CardMoveMultiHeader','ShowFirstPlayer','ShowTurn','ShowPhase','ShowChain','ShowTag','ShowCardName','ShowText'].includes(label))handChanges.push({key:`${i}:unknown`,index:i,type:'invalidate'});
     const items=label==='ShowAction'?[singles[idx]]:label==='CardMoveMulti'?list(batches[idx]?.get('actionDatas'),1000):[];
-    for(let j=0;j<items.length;j++){if(!items[j])throw Error('日志条目缺失');const m=decodeAction(items[j],i,j,myTeam,runningCard);if(m)moves.push(m);}
+    // Associate only one directly adjacent public name with one movement.
+    // Multi-card batches cannot share one identity; a single-item batch can.
+    const previous=base[i-1];
+    const publicName=items.length===1&&previous?.get('loglabel')==='ShowCardName'?names[previous.get('dataindex')]:undefined;
+    for(let j=0;j<items.length;j++){if(!items[j])throw Error('日志条目缺失');const m=decodeAction(items[j],i,j,myTeam,runningCard);if(m)moves.push(m);handChanges.push(...handChange(items[j],i,j,myTeam,publicName));}
   }
   // The opening draw blocks must be present. Absence is not silently treated as a complete history.
   const opening = base.slice(0,8).filter(x=>x.get('loglabel')==='CardMoveMulti').length>=2;
-  return {moves,logLength:base.length,completeLog:opening};
+  return {moves,logLength:base.length,completeLog:opening,handChanges};
 }
 /** Input permission also changes at prompts/opponent turns; it is not a scene-stability signal. */
 export class SceneStability {
@@ -76,13 +84,20 @@ export class NativeReader {
       this.preparationSeen=views.some(v=>v.getClassName()==='YgomGame.Colosseum.ColosseumInfoViewController');
     }
     const d=c.getClass('YgomGame.Duel.DuelClient').get('instance');
+    if(!d&&current?.getClassName()?.startsWith('YgomGame.Duel.'))throw Error('对局场面更新中，保留记录等待重读');
     if(!d||!current?.getClassName()?.startsWith('YgomGame.Duel.')){this.stability=new SceneStability();return result;}
     const w=d.get('effectWorker'),g=w.get('goManager'),f=g.get('duelField'),h=d.get('handCardManager'),log=d.get('duelHUD').get('duellog');
     const myTeam=num(f.get('nearHandPlace').get('team'));if(myTeam>1)throw Error('无法确认玩家方位');
     const before=num(log.get('m_LogBaseItemList').get('_size'));
-    const counts={myHand:list(h.get('nearHandInfoList'),200).length,opponentHand:list(h.get('farHandInfoList'),200).length,myField:0,opponentField:0};
+    const opponentHand=list(h.get('farHandInfoList'),200);
+    const counts={myHand:list(h.get('nearHandInfoList'),200).length,opponentHand:opponentHand.length,myField:0,opponentField:0};
+    // Snapshot the public display before reading logs; verify it again before committing.
+    let displayed:number[]|null=null;
+    try{displayed=visibleHand(opponentHand);}catch{}
     const seen=new Set<string>();
-    for(const card of list(g.get('cardRoots'),300)) {
+    const roots=list(g.get('cardRoots'),300);
+    try{result.opponentSetSlots=facedownBackrow(roots,myTeam);result.opponentPublicSlots=faceupBackrow(roots,myTeam);}catch{}
+    for(const card of roots) {
       const place=card.get('cardLocator')?.get('cardPlace')?.get('position'),team=card.get('team');
       if(!Number.isInteger(place)||place<0||place>12||(team!==0&&team!==1))continue;
       const uid=card.get('uniqueId'), key=`${team}:${place}:${uid}`;
@@ -97,11 +112,17 @@ export class NativeReader {
       if(place.get('position')===14)result.extraCount=num(place.get('localCardNum'));
       if(place.get('position')===17)result.banishedCount=num(place.get('localCardNum'));
     }
-    const events=readActions(log,myTeam);
+    const {handChanges,...events}=readActions(log,myTeam);
     if(before!==log.get('m_LogBaseItemList').get('_size'))throw Error('场面更新中，等待稳定数据');
     let identity='';try{const settings=dictionary(d.get('engineInitializer').get('duelSettings'));identity=String(settings.get('duel_start_timestamp')??'');}catch{}
     const session=`${this.pid}:${d.getBaseAddress()}:${identity}`,timestamp=Date.now();
-    const key=JSON.stringify({session,counts,monsters:result.monsters,extra:result.extraCount,banished:result.banishedCount,events});
-    return {...result,...events,status:'duel',counts,myTeam,busy:this.stability.busy(key,timestamp),session,timestamp};
+    let publicHandObservation:Snapshot['publicHandObservation'];
+    try{
+      const after=list(h.get('farHandInfoList'),200);
+      if(displayed===null||after.length!==counts.opponentHand||JSON.stringify(visibleHand(after))!==JSON.stringify(displayed)||before!==log.get('m_LogBaseItemList').get('_size'))throw Error('公开手牌更新中');
+      publicHandObservation={cards:displayed,changes:handChanges};
+    }catch{}
+    const key=JSON.stringify({session,counts,monsters:result.monsters,extra:result.extraCount,banished:result.banishedCount,events,publicHandObservation});
+    return {...result,...events,publicHandObservation,status:'duel',counts,myTeam,busy:this.stability.busy(key,timestamp),session,timestamp};
   }
 }

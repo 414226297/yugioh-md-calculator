@@ -1,6 +1,11 @@
 import {parseCatalog} from './catalog.js';
 
-export const catalogURL='https://ygomjson.untapped.gg/v1/latest/en-us/cards.json';
+export const catalogURL='https://ygomjson.untapped.gg/v1/latest/zh-cn/cards.json';
+export function needsChineseCatalog(cache:unknown):boolean {
+  const value=cache as {source?:unknown;cards?:unknown}|null;
+  if(!value?.cards||typeof value.source!=='string')return true;
+  try{const url=new URL(value.source);return url.hostname!=='ygomjson.untapped.gg'||!/^\/v1\/[^/]+\/zh-cn\/cards\.json$/.test(url.pathname);}catch{return true;}
+}
 type CatalogResponse=Pick<Response,'ok'|'status'|'url'|'headers'|'json'>;
 export type CatalogFetch=(url:string,options:{redirect:'manual';signal:AbortSignal})=>Promise<CatalogResponse>;
 function checkedURL(value:string,base?:string):string {

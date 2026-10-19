@@ -34,7 +34,7 @@ const env={...process.env};
 for(const key of Object.keys(env))if(/^(?:ELECTRON_RUN_AS_NODE|MD_TEST_MODE|MD_SCRY_PATH|APPDATA|LOCALAPPDATA|PROGRAMFILES|PROGRAMFILES\(X86\))$/i.test(key))delete env[key];
 env.APPDATA=path.join(work,'fresh-profile','roaming');env.LOCALAPPDATA=path.join(work,'fresh-profile','local');env.ProgramFiles=path.join(work,'fresh-program-files');
 mkdirSync(env.APPDATA,{recursive:true});mkdirSync(env.LOCALAPPDATA,{recursive:true});
-const app=await electron.launch({executablePath:path.join(unpacked,'MD-Cannon-Assistant.exe'),args:[],cwd:work,env,timeout:30000});
+const app=await electron.launch({executablePath:path.join(unpacked,'MD-Assistant.exe'),args:[],cwd:work,env,timeout:30000});
 try{
  const page=await app.firstWindow();await page.waitForLoadState('domcontentloaded');
  await page.getByText('等待核对 / 更新',{exact:true}).waitFor();
@@ -61,7 +61,7 @@ try{
 const readerFlag=process.argv.indexOf('--reader');
 if(readerFlag!==-1){
  const reader=process.argv[readerFlag+1];if(!reader||!path.isAbsolute(reader)||!existsSync(reader))throw Error('--reader 需要本机真实读取模块路径');
- const linked=await electron.launch({executablePath:path.join(unpacked,'MD-Cannon-Assistant.exe'),args:[],cwd:work,env:{...env,MD_SCRY_PATH:reader},timeout:30000});
+ const linked=await electron.launch({executablePath:path.join(unpacked,'MD-Assistant.exe'),args:[],cwd:work,env:{...env,MD_SCRY_PATH:reader},timeout:30000});
  try{
   const page=await linked.firstWindow();await page.waitForLoadState('domcontentloaded');
   let state;const deadline=Date.now()+20000;

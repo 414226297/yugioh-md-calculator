@@ -17,7 +17,7 @@ const name=`md-cannon-assistant-${pkg.version}-win-x64-${Date.now()}`;
 const output=path.join(release,name);
 // Copy only the official runtime and compiled first-party files. Never copy the workspace.
 cpSync(runtime,output,{recursive:true,dereference:true});
-renameSync(path.join(output,'electron.exe'),path.join(output,'MD-Cannon-Assistant.exe'));
+renameSync(path.join(output,'electron.exe'),path.join(output,'MD-Assistant.exe'));
 renameSync(path.join(output,'LICENSE'),path.join(output,'LICENSE.electron.txt'));
 cpSync(path.join(root,'LICENSE'),path.join(output,'LICENSE'));
 const appDir=path.join(output,'resources','app');mkdirSync(appDir,{recursive:true});
@@ -32,16 +32,16 @@ for(const relative of compiled){
   mkdirSync(path.dirname(destination),{recursive:true});cpSync(source,destination);
 }
 writeFileSync(path.join(output,'使用说明.txt'),[
- '联栗炮助手 Windows x64 便携版',
+ 'MD助手 Windows x64 便携版',
  '',
  '1. 将整个ZIP解压到普通文件夹；不要直接在压缩软件内运行。',
- '2. 双击 MD-Cannon-Assistant.exe，无需安装 Node.js、pnpm 或 Codex。',
+ '2. 双击 MD-Assistant.exe，无需安装 Node.js、pnpm 或 Codex。',
  '3. 自动读取仍需本机已有兼容的 Untapped Companion 原生模块及 MD。',
  '   程序自动查找常见安装位置；未找到时，在设置中填写本机 .node 路径。',
  '4. 本机验证的 Unity 版本为6000.0.61f1。游戏/读取模块更新后需要重新验证，',
  '   不保证所有版本都能读取。出现待核对或读取失败时，不要沿用旧结果。',
  '5. 首次启动联网获取公开卡片属性；没有缓存且无法下载时，计算需要等待。',
- '6. 在MD打开牌组编辑界面获取牌组，再进入对局。',
+ '6. 对战准备页面自动识别已知牌组；首次缺少卡表时打开牌组编辑界面获取。',
  '7. 运行数据保存于当前用户 %APPDATA%\\md-cannon-assistant，不会写回解压目录。',
  '',
  '此包不包含第三方读取模块、个人牌组、历史对局、测试结果或Git元数据。',

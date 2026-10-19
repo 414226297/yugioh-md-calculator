@@ -1,22 +1,36 @@
 export type Kind = 'xyz' | 'fusion' | 'other';
 export type Quality = 'confirmed' | 'manual' | 'unknown';
-export interface Card { id: number; name: string; kind: Kind; value: number }
+export interface Card { id: number; name: string; kind: Kind; value: number; password?:number; category?:'monster'|'spell'|'trap' }
 export interface Stock { id: number; count: number; face: 'up' | 'down' | 'unknown' }
 export interface Deck { id: string; name: string; main: Record<string, number>; extra: Record<string, number>; readAt: number; revision?:number }
 export interface DeckSelection {id:string;name:string;revision:number;cacheId?:string;localizedName?:boolean}
 export interface Counts { myHand: number | null; opponentHand: number | null; myField: number | null; opponentField: number | null }
 export interface Monster { uid: number; kind: 'level' | 'rank' | 'none'; value: number | null; faceUp: boolean }
 export interface Move { key: string; index: number; action: number; cardId: number; player: number; from: number; to: number | null; targetPlayer: number | null; face: 'up' | 'down' | 'unknown'; affectsInventory: boolean }
+/** Public display observations and sanitized log evidence; no hidden hand identities. */
+export type PublicHandEvent = { key:string; index:number } & (
+  { type:'reveal'; cards:number[]; full?:boolean } |
+  { type:'enter'; cardId:number; source?:'search' } |
+  { type:'leave'; cardId:number|null } |
+  { type:'invalidate' }
+);
+export interface HandChange {key:string;index:number;type:'enter'|'leave'|'invalidate'|'fieldReveal'|'fieldLeave'|'fieldSet'|'fieldConfirm';scope?:'hand';cardId?:number;slot?:number;source?:'search'}
+export interface SetCard {slot:number;candidates:number[];unknownPossible:boolean;confirmedId?:number;publicId?:number;origin?:string;searchedCandidates?:number[];positionChanged?:boolean}
 export interface Snapshot {
   status: 'waiting' | 'menu' | 'duel' | 'error'; session: string | null; timestamp: number;
   counts: Counts; monsters: Monster[]; myTeam: number; extraCount: number | null;
   banishedCount: number | null; moves: Move[]; logLength: number;
   completeLog: boolean; deck: Deck | null; reason?: string; version?: string;
   busy?: boolean;
+  publicHandBusy?: boolean;
+  opponentSetSlots?:number[];
+  opponentPublicSlots?:number[];
   /** duel means the local player's initial deck was read from this duel's settings. */
   deckSource?: 'editor' | 'duel' | 'preparation';
   deckSelection?:DeckSelection|null;
   cachedPreparationDeck?:Deck;
+  publicHandEvents?:PublicHandEvent[];
+  publicHandObservation?:{cards:number[];changes:HandChange[]};
 }
 export interface Inventory { extra: Stock[]; banished: Stock[]; quality: Quality; reasons: string[] }
 export interface Plan { rank: number; level: number; targetKind: 'level' | 'rank'; target: number; returnRank: number; returnLevel: number; usesPrevious: boolean }

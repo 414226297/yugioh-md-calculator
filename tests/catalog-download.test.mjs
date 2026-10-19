@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {downloadCatalog,catalogURL} from '../dist/data/download-catalog.js';
+import {downloadCatalog,catalogURL,needsChineseCatalog} from '../dist/data/download-catalog.js';
 const dataset=()=>Array.from({length:1001},(_,i)=>({id:i+1,name:`Fixture ${i+1}`,kind:3,level:1}));
 test('fresh Electron-style response with empty URL still loads validated card attributes',async()=>{
  const result=await downloadCatalog(async(url,options)=>{
@@ -26,4 +26,13 @@ test('incomplete attributes and HTTP failures are never accepted as a ready cata
 });
 test('redirect loops are bounded',async()=>{
  let count=0;await assert.rejects(downloadCatalog(async()=>{count++;return new Response(null,{status:302,headers:{location:catalogURL}});}),/次数过多/);assert.equal(count,6);
+});
+test('Chinese names are requested and preserved, old English caches require migration',async()=>{
+ assert.match(catalogURL,/\/zh-cn\/cards\.json$/);
+ const data=dataset();data[0].name='愚蠢埋葬';
+ const result=await downloadCatalog(async()=>new Response(JSON.stringify(data)));
+ assert.equal(result.cards[1].name,'愚蠢埋葬');
+ assert.equal(needsChineseCatalog({source:'https://ygomjson.untapped.gg/v1/24462996.5/en-us/cards.json',cards:{}}),true);
+ assert.equal(needsChineseCatalog({source:'https://ygomjson.untapped.gg/v1/24462996.5/zh-cn/cards.json',cards:{}}),false);
+ assert.equal(needsChineseCatalog(null),true);
 });

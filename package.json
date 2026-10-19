@@ -1,9 +1,9 @@
 {
   "name": "md-cannon-assistant",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
-  "description": "个人使用的联栗炮助手 Windows 原型",
+  "description": "MD助手：公开手牌与盖牌记录、联栗炮计算",
   "type": "module",
   "main": "dist/desktop/main.js",
   "scripts": {
