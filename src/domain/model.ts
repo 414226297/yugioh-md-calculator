@@ -1,6 +1,6 @@
 export type Kind = 'xyz' | 'fusion' | 'other';
 export type Quality = 'confirmed' | 'manual' | 'unknown';
-export interface Card { id: number; name: string; kind: Kind; value: number; password?:number; category?:'monster'|'spell'|'trap' }
+export interface Card { id: number; name: string; kind: Kind; value: number; password?:number; category?:'monster'|'spell'|'trap'; fieldSpell?:boolean; rarity?:string }
 export interface Stock { id: number; count: number; face: 'up' | 'down' | 'unknown' }
 export interface Deck { id: string; name: string; main: Record<string, number>; extra: Record<string, number>; readAt: number; revision?:number }
 export interface DeckSelection {id:string;name:string;revision:number;cacheId?:string;localizedName?:boolean}

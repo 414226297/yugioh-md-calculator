@@ -6,6 +6,7 @@ const app=await electron.launch({args:['.'],env,timeout:30000});
 const failures=[];const results=[];
 try{
  const page=await app.firstWindow();page.on('pageerror',e=>failures.push(e.message));await page.waitForLoadState('domcontentloaded');
+ await page.evaluate(async()=>{const s=await window.cannon.getState();await window.cannon.command('config',{...s.config,overlayEnabled:false});});
  const inject=async(snapshot,inventory)=>{
    snapshot.timestamp=Date.now();
    if(!snapshot.publicHandObservation&&!snapshot.publicHandEvents)snapshot.publicHandEvents=[];

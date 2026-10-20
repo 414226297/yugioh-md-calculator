@@ -1,0 +1,130 @@
+{
+  "repository": "https://github.com/daominah/daominah.github.io",
+  "files": [
+    {
+      "file": "LICENSE",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/LICENSE",
+      "sha256": "ab023f53dfbb09aff7df702ba0f702307aa72d9b541e6ea6579c3de7b6636252"
+    },
+    {
+      "file": "card_frame-spell.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/spell.png",
+      "sha256": "684590cf1009d72625d55ea13a854eabd11ecc0ae22093afb51043c45040c7f8"
+    },
+    {
+      "file": "card_frame-trap.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/trap.png",
+      "sha256": "83f30490ab3f6effb6e56f93fce4923d6f4b589ff098fa16e03a2d89d575dad6"
+    },
+    {
+      "file": "card_frame-monster_normal.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/monster_normal.png",
+      "sha256": "1ad7d916e18f8493f184fbbc263722fa851cdbae8ca6c2ff111b30c288229e26"
+    },
+    {
+      "file": "card_frame-monster_effect.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/monster_effect.png",
+      "sha256": "71fe26a3e6876e8008aee1bb35597c60ea5544b4cee8fe0461f68db208a6f428"
+    },
+    {
+      "file": "card_frame-monster_fusion.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/monster_fusion.png",
+      "sha256": "6fe790319e533dd49cd169bf177700e92c67ea112c078e2d77bbdf7ba3cef155"
+    },
+    {
+      "file": "card_frame-monster_synchro.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/monster_synchro.png",
+      "sha256": "c283a789b395b93d33da6aa83eb4e0640204a82d61e620191e2e63cfbc9a28ba"
+    },
+    {
+      "file": "card_frame-monster_xyz.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/monster_xyz.png",
+      "sha256": "d07cd94f1332646bd33be408bd93a8eee0abfb1860a110624d0b463bf573e508"
+    },
+    {
+      "file": "card_frame-monster_link.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/monster_link.png",
+      "sha256": "c35a24f5f491ed419e9800069be693f5a61941c10209ea2a6acb91bc5456ae1c"
+    },
+    {
+      "file": "card_frame-monster_ritual.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/card_frame/monster_ritual.png",
+      "sha256": "0de3ba767dc58318c704add26ee627409a67cd86436928ae0fff59494d13ec85"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr01.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr01.png",
+      "sha256": "b55c47c64f4dda8d01ecfd3bc5655fc3374ff6592ef6339f60519a84fa34ff25"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr02.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr02.png",
+      "sha256": "be4d42be88fb5e9430fd89f44eebfaa8b4a6be3481f59f97e9b91591a5e504af"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr03.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr03.png",
+      "sha256": "a39f06407dc98b07ff62f770fac9f11394ce64bc9e29e3498eb8f976e30b9de7"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr04.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr04.png",
+      "sha256": "a89567025936366bf43e5ff6997c5c8f3c36e1261d87e464579dd4c86cc2fbab"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr05.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr05.png",
+      "sha256": "2d7e0b837a181106e13864f565ae8a79af27cdb098e8ad15b1e4c5a4ffec13a3"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr06.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr06.png",
+      "sha256": "711e650722f248c29598abcfa5843785ccebd4a60f75d112323df7f441d5f672"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr07.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr07.png",
+      "sha256": "191a0fd0a88c87f7d6ef35666b2cd6812fb8f1f878b359c4f272e1b2cdac86ce"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr08.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr08.png",
+      "sha256": "82c9e3ad8ba229065b52f0a8235aa2cc3a2c438cbc5b16b4594e7994e5381066"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Attr09.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Attr09.png",
+      "sha256": "3840f6def41f26ab9faa076008e30e18f9213c1be5c026bf8c34f5972a7e91ad"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Icon01.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Icon01.png",
+      "sha256": "2059c8cc51e03ec1eff701b5879b38acc0f06ab496f9b26346f202d161471b43"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Icon02.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Icon02.png",
+      "sha256": "0963df1d9d162b33d8a1713c1fb5241afb22d7cdb9ee4be24766f17534eefe47"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Icon03.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Icon03.png",
+      "sha256": "aeefaafaf612ceb96682fcca314d8ef5108235165493242c21ab5895e12c58b1"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Icon04.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Icon04.png",
+      "sha256": "29b467ed8f3f37c997b84f3757d6a0386a1c86332730dd7531e468787bf7f7ad"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Icon05.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Icon05.png",
+      "sha256": "5dbda12d23e5f37ac74a7b93ecc08e3b753d43fe65b7b5bdae4c1449fa54e294"
+    },
+    {
+      "file": "icon-GUI_T_Icon1_Icon06.png",
+      "source": "https://raw.githubusercontent.com/daominah/daominah.github.io/master/icon/GUI_T_Icon1_Icon06.png",
+      "sha256": "c3ef2836179c9bbfcd445b7a7e834c0303bc234cb3150d4c6d75c28c06ef0118"
+    }
+  ]
+}

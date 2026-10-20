@@ -1,0 +1,92 @@
+{
+  "origin": "User-installed Master Duel, read-only extraction",
+  "date": "2026-10-19",
+  "files": [
+    {
+      "file": "GUI_CardInfo_NameBase.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_CardInfo_NameBase",
+      "sha256": "26538ca696db7ea3486260f36f659c83485efc4c669ea4f3ab23e43c59308c12"
+    },
+    {
+      "file": "GUI_Global_Window_Frame.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_Global_Window_Frame",
+      "sha256": "51f47e9a970e9a0d7dd957cb721eed5e3914f09ffc69cc7e55309a8f20c0eb28"
+    },
+    {
+      "file": "GUI_Global_Window_Base.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_Global_Window_Base",
+      "sha256": "6b8f0abb532fc6ef15882668c4c5023a8cc612347494b26a654a0d89fc5c9f75"
+    },
+    {
+      "file": "GUI_CommonScrollBar.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_CommonScrollBar",
+      "sha256": "0e2b4f736995d3a2dcd17400534dc9eb0291e23eda06d4de0737d06b807d56ff"
+    },
+    {
+      "file": "GUI_CommonCardInfoDetail_Card_Over.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_CommonCardInfoDetail_Card_Over",
+      "sha256": "2c65d6809aba07458d35654900067025634671c4003825962bec5d2d0ab42081"
+    },
+    {
+      "file": "GUI_Icon_Rarity0.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_Icon_Rarity0",
+      "sha256": "4e4b05b07fbbcb6c139857d9ba888351c388f7f4f56de3c439adb7f511f2643a"
+    },
+    {
+      "file": "GUI_Icon_Rarity1.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_Icon_Rarity1",
+      "sha256": "32572b3f206fef2e4e5c501302c637bcf110cb20537726afede4e4c3d039498d"
+    },
+    {
+      "file": "GUI_Icon_Rarity2.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_Icon_Rarity2",
+      "sha256": "d8e742573f0d061aaf1ced0863a61cb963c2a510f94a1a102204bc5123378a22"
+    },
+    {
+      "file": "GUI_Icon_Rarity3.png",
+      "source": "masterduel_Data/data.unity3d",
+      "sprite": "GUI_Icon_Rarity3",
+      "sha256": "f79939f2074c62a17b757171b32b7810c1580b913cec2876daa9bdae4a1d06ed"
+    },
+    {
+      "file": "FZYouHJW_509R.ttf",
+      "source": "masterduel_Data/StreamingAssets/AssetBundle/25/25946b17",
+      "font": "FZYouHJW_509R",
+      "size": 2965096,
+      "sha256": "e568c115b4da7cbbd379dc9966d2a350947baba68eafbae3a2e1aee131143ee7"
+    },
+    {
+      "file": "FZYouHJW_512B.ttf",
+      "source": "masterduel_Data/StreamingAssets/AssetBundle/da/da15c88f",
+      "font": "FZYouHJW_512B",
+      "size": 3269316,
+      "sha256": "c49283f4c4044bf002e1da18a50e59d43ce93806941ca6f183a0f8817fc35b6c"
+    },
+    {
+      "file": "GUI_Global_Window_Frame_trim.png",
+      "source": "GUI_Global_Window_Frame.png",
+      "transform": "Crop native sprite at alpha>=128 bounds (28,26,72,70) to remove transparent atlas padding.",
+      "sha256": "b9bd051a6001f6d7c0adb904a9a08a969bef5d192d9bbe041d8ed4c05daf58ba"
+    },
+    {
+      "file": "FZYouHJW_509R-outline.ttf",
+      "source": "FZYouHJW_509R.ttf",
+      "transform": "Keep glyph outlines; change gasp rendering flags to 15 for browser smoothing.",
+      "sha256": "f31228302b8bd5b5ec97256980973126f519d82dcfc442567e39a61dae471da2"
+    },
+    {
+      "file": "FZYouHJW_512B-outline.ttf",
+      "source": "FZYouHJW_512B.ttf",
+      "transform": "Keep glyph outlines; change gasp rendering flags to 15 for browser smoothing.",
+      "sha256": "3f11f15845b753ebb7bba7976b24a41e231968343b0b6f5d606232ad63e8a5d3"
+    }
+  ]
+}

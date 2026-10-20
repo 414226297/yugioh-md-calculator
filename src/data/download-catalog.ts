@@ -4,6 +4,7 @@ export const catalogURL='https://ygomjson.untapped.gg/v1/latest/zh-cn/cards.json
 export function needsChineseCatalog(cache:unknown):boolean {
   const value=cache as {source?:unknown;cards?:unknown}|null;
   if(!value?.cards||typeof value.source!=='string')return true;
+  if(Object.values(value.cards as Record<string,{category?:string;fieldSpell?:boolean;rarity?:string}>).some(c=>c.category==='spell'&&typeof c.fieldSpell!=='boolean'))return true;
   try{const url=new URL(value.source);return url.hostname!=='ygomjson.untapped.gg'||!/^\/v1\/[^/]+\/zh-cn\/cards\.json$/.test(url.pathname);}catch{return true;}
 }
 type CatalogResponse=Pick<Response,'ok'|'status'|'url'|'headers'|'json'>;

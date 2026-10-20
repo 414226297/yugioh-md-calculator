@@ -9,7 +9,8 @@ export function parseCatalog(raw: unknown): Record<number,Card> {
     const kind=[2,3,39,41,48,50,51].includes(v.kind)?'fusion':[22,23,34].includes(v.kind)?'xyz':'other';
     const value=kind==='other'?0:v.level;
     if(!Number.isInteger(value)||value<0||value>99)throw Error('卡片等级／阶级无效');
-    result[v.id]={id:v.id,name:v.name,kind,value,...(v.kind===13?{category:'spell' as const}:v.kind===14?{category:'trap' as const}:v.kind!==10?{category:'monster' as const}:{}),...(Number.isInteger(v.ydk_id)&&v.ydk_id>0&&v.ydk_id<1000000000?{password:v.ydk_id}:{})};
+    result[v.id]={id:v.id,name:v.name,kind,value,...(v.kind===13?{category:'spell' as const,fieldSpell:v.spell_type===2}:v.kind===14?{category:'trap' as const}:v.kind!==10?{category:'monster' as const}:{}),...(Number.isInteger(v.ydk_id)&&v.ydk_id>0&&v.ydk_id<1000000000?{password:v.ydk_id}:{})};
+    if(Number.isInteger(v.rarity)&&v.rarity>=1&&v.rarity<=4)result[v.id].rarity=['N','R','SR','UR'][v.rarity-1];
   }
   return result;
 }

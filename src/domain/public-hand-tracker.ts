@@ -18,7 +18,7 @@ export class PublicHandTracker {
   }
   private candidates(events:PublicHandEvent[],count:number,logLength:number,catalog:Record<number,Card>){
     const hand=this.handAt(events,count,logLength);
-    const possible=[...hand.cards,...hand.uncertainCards].filter(c=>catalog[c.id]?.category!=='monster');
+    const possible=[...hand.cards,...hand.uncertainCards].filter(c=>catalog[c.id]?.category!=='monster'&&!catalog[c.id]?.fieldSpell);
     const candidates=[...new Set(possible.map(c=>c.id))];
     // Special effects may place monsters as spells/traps, so those prevent
     // treating a spell/trap-only candidate list as exhaustive.

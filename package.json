@@ -1,6 +1,6 @@
 {
   "name": "md-cannon-assistant",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "license": "MIT",
   "description": "MD助手：公开手牌与盖牌记录、联栗炮计算",

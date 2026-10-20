@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {downloadCatalog,catalogURL,needsChineseCatalog} from '../dist/data/download-catalog.js';
+import {parseCatalog} from '../dist/data/catalog.js';
+test('field subtype is preserved and old spell caches are refreshed',()=>{
+ const cards=parseCatalog([{id:4338,name:'山',kind:13,spell_type:2},{id:4837,name:'融合',kind:13,spell_type:null}]);
+ assert.equal(cards[4338].fieldSpell,true);assert.equal(cards[4837].fieldSpell,false);
+ assert.equal(needsChineseCatalog({source:catalogURL,cards}),false);
+ assert.equal(needsChineseCatalog({source:catalogURL,cards:{4338:{category:'spell'}}}),true);
+});
 const dataset=()=>Array.from({length:1001},(_,i)=>({id:i+1,name:`Fixture ${i+1}`,kind:3,level:1}));
 test('fresh Electron-style response with empty URL still loads validated card attributes',async()=>{
  const result=await downloadCatalog(async(url,options)=>{

@@ -1,4 +1,5 @@
-import {app,BrowserWindow,ipcMain,screen} from 'electron';
+import {CardOverlay} from './card-overlay.js';
+import {app,BrowserWindow,ipcMain,screen,Tray,Menu,nativeImage} from 'electron';
 import path from 'node:path';import {fileURLToPath} from 'node:url';
 import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:fs';
 import {DuelStore} from '../domain/store.js';import {validateDeck,type Snapshot} from '../domain/model.js';
@@ -9,6 +10,9 @@ import {resolveSelectedDeck} from '../domain/deck-cache.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const dataDir=dataDirectory(root,process.env.APPDATA??app.getPath('appData'),app.isPackaged,process.env.MD_TEST_MODE==='1');
 mkdirSync(dataDir,{recursive:true});app.setPath('userData',path.join(dataDir,'electron'));
+let overlay:CardOverlay|undefined;
+let tray:Tray|undefined;let quitting=false;
+function showMain(){if(!win||win.isDestroyed())return;if(win.isMinimized())win.restore();win.show();win.focus();}
 const store=new DuelStore();let win:BrowserWindow;let host:ReaderHost;let config=defaults();let notice='';let catalogMessage='';let downloading=false;
 const read=(name:string)=>{try{return JSON.parse(readFileSync(path.join(dataDir,name),'utf8'));}catch{return null;}};
 function save(name:string,value:unknown){const file=path.join(dataDir,name);writeFileSync(file+'.tmp',JSON.stringify(value,null,2));renameSync(file+'.tmp',file);}
@@ -18,7 +22,7 @@ function companionDecks(){
   try{return JSON.parse(readFileSync(path.join(process.env.APPDATA??app.getPath('appData'),'untapped-companion','ygom','decks.json'),'utf8'));}catch{return null;}
 }
 function payload(){return {...store.view(),notice,catalogMessage,config};}
-function publish(){if(win&&!win.isDestroyed())win.webContents.send('state',payload());}
+function publish(){if(win&&!win.isDestroyed())win.webContents.send('state',payload());overlay?.refresh();}
 function begin(){
   if(process.env.MD_TEST_MODE==='1')return;store.paused=false;store.error='';
   config={...config,modulePath:resolveModulePath(config.modulePath)};
@@ -31,7 +35,7 @@ async function updateCatalog(){
   if(downloading)return;downloading=true;catalogMessage='正在获取中文卡名与卡片属性';publish();
   try{
     const result=await downloadCatalog(fetchCatalogResponse);
-    store.catalog=result.cards;save('catalog.json',{source:result.source,fetchedAt:Date.now(),cards:result.cards});catalogMessage='中文卡名与卡片属性已更新';
+    store.catalog=result.cards;save('catalog.json',{reportStyleVersion:1,source:result.source,fetchedAt:Date.now(),cards:result.cards});catalogMessage='中文卡名与卡片属性已更新';
   }catch(e){catalogMessage=`属性更新失败，${Object.keys(store.catalog).length?'继续使用本地缓存':'需要联网重试'}：${String(e)}`;}
   finally{downloading=false;publish();}
 }
@@ -45,6 +49,21 @@ app.whenReady().then(async()=>{
     webPreferences:{preload:fileURLToPath(new URL('./preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
+  overlay=new CardOverlay(()=>store.view(),()=>config);
+  const trayIcon=nativeImage.createFromPath(fileURLToPath(new URL('../ui/assets/md/icon-GUI_T_Icon1_Attr08.png',import.meta.url))).resize({width:32,height:32});
+  tray=new Tray(trayIcon);tray.setToolTip('MD助手');
+  const trayMenu=Menu.buildFromTemplate([
+    {id:'show',label:'显示 MD助手',click:showMain},
+    {id:'hide',label:'隐藏窗口',click:()=>win.hide()},
+    {type:'separator'},
+    {id:'quit',label:'退出 MD助手',click:()=>app.quit()}
+  ]);
+  tray.setContextMenu(trayMenu);tray.on('click',showMain);tray.on('double-click',showMain);
+  win.on('close',event=>{if(!quitting){event.preventDefault();win.hide();}});
+  win.on('minimize',()=>{if(!quitting)win.hide();});
+  if(process.env.MD_TEST_MODE==='1')ipcMain.handle('test:tray',(_event,id:string)=>{
+    const item=trayMenu.getMenuItemById(id);if(!item)throw Error('Unknown tray action');item.click(undefined as any,undefined as any,{} as any);return true;
+  });
   host=new ReaderHost(fileURLToPath(new URL('../reader/worker.js',import.meta.url)),value=>{
     const s=value as Snapshot;if(!s||!['waiting','menu','duel','error'].includes(s.status))return;
     const captured=s.cachedPreparationDeck;
@@ -71,7 +90,7 @@ app.whenReady().then(async()=>{
   let testDetails:Record<number,CardDetail>={};
   ipcMain.handle('card-detail',async(event,id:number)=>{
     try{
-      if(event.sender!==win.webContents||!Number.isInteger(id))throw Error('无效来源或卡片编号');
+      if((event.sender!==win.webContents&&!overlay?.accepts(event.sender))||!Number.isInteger(id))throw Error('无效来源或卡片编号');
       const view=store.view(),hand=view.publicHand;
       if(![...hand.cards,...hand.uncertainCards].some(c=>c.id===id)&&!view.backrow.cards.some(c=>c.candidates.includes(id)))throw Error('这张卡已不在公开记录中');
       if(process.env.MD_TEST_MODE==='1'){
@@ -104,12 +123,13 @@ app.whenReady().then(async()=>{
         case 'catalog':await updateCatalog();break;
         case 'config':config=validateConfig(value);save('config.json',config);win.setSize(config.width,config.height);begin();break;
         case 'dismissNotice':notice='';break;
-        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.2.0',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
+        case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.3.0',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
         default:throw Error('未知操作');
       }
       publish();return {ok:true};
     }catch(e){return {ok:false,error:e instanceof Error?e.message:String(e)};}
   });
+  if(process.env.MD_TEST_MODE==='1')ipcMain.handle('test:window',(_e,frame)=>{overlay?.observe(frame);return true;});
   if(process.env.MD_TEST_MODE==='1')ipcMain.handle('test:state',(_e,fixture)=>{
     if(fixture.cardDetails)testDetails=fixture.cardDetails;
     store.restore();store.error='';store.paused=false;store.deck=fixture.deck;store.catalog=fixture.catalog;
@@ -119,7 +139,8 @@ app.whenReady().then(async()=>{
   });
   await win.loadFile(fileURLToPath(new URL('../ui/index.html',import.meta.url)));
   begin();setInterval(publish,500).unref();
-  if((!Object.keys(store.catalog).length||needsChineseCatalog(cached)||!Object.values(store.catalog).some(c=>c.password&&c.category))&&process.env.MD_TEST_MODE!=='1')void updateCatalog();
+  if((!Object.keys(store.catalog).length||needsChineseCatalog(cached)||cached?.reportStyleVersion!==1||!Object.values(store.catalog).some(c=>c.password&&c.category))&&process.env.MD_TEST_MODE!=='1')void updateCatalog();
 });
 app.on('window-all-closed',()=>{host?.stop();app.quit();});
-app.on('before-quit',()=>host?.stop());
+app.on('activate',showMain);
+app.on('before-quit',()=>{quitting=true;tray?.destroy();tray=undefined;overlay?.destroy();overlay=undefined;host?.stop();});

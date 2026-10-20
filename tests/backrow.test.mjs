@@ -11,6 +11,16 @@ const set={key:'10:0',index:10,type:'leave',slot:9};
 const reveal={key:'12:0:field',index:12,type:'fieldReveal',slot:9,cardId:100};
 const view=(events,count)=>publicHand({...scene(),logLength:100,counts:{...scene().counts,opponentHand:count},publicHandEvents:events});
 const update=(t,len,count,visible,changes,slots)=>t.update('a',len,count,visible,changes,0,true,slots,catalog);
+
+test('field spells cannot be inferred into backrow and remain in hand after another card is set',()=>{
+ const t=new PublicHandTracker();
+ const cards={...catalog,200:{...catalog[200],fieldSpell:true}};
+ t.update('a',10,2,[100,200],[],0,true,[],cards);
+ const events=t.update('a',11,1,[],[set],0,true,[9],cards);
+ assert.deepEqual(t.setCards()[0].candidates,[100]);
+ assert.equal(t.setCards()[0].confirmedId,100);
+ assert.deepEqual(view(events,1).cards,[{id:200,count:1}]);
+});
 test('set count reads opponent face flags only, excludes face-up cards, monsters and own cards',()=>{
  const card=(slot,team,face)=>ref({team,isFace:face,cardLocator:ref({cardPlace:ref({position:slot})})});
  assert.deepEqual(facedownBackrow([card(9,1,false),card(9,1,false),card(12,1,false),card(8,1,true),card(2,1,false),card(7,0,false)],0),[9]);
