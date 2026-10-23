@@ -27,7 +27,7 @@ function publicCardName(name?:Ref):number|undefined {
 }
 
 /** Decode zone transitions once for all movement actions, independent of effects. */
-export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicName?:Ref):HandChange[]{
+export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicName?:Ref,priorDraw?:{key:string;action:Ref}):HandChange[]{
   const l=a.get('datal'),m=a.get('datac'),r=a.get('datar'),key=`${index}:${sub}`;
   const action=m.get('databyte1'),from=l.get('databyte0'),player=l.get('databyte1');
   const rightType=r.get('datatype'),to=rightType===1?r.get('databyte0'):null;
@@ -37,6 +37,14 @@ export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicNam
   if(m.get('datatype')!==3||l.get('datatype')!==1)return leaves||enters?[{key,index,type:'invalidate',...scope}]:[];
   // Draw encodes destination on the left; no hidden draw identity is read.
   if(action===1)return player===opponent?[{key,index,type:'enter'}]:[];
+  // Public hand disclosure is a log event even when its visual display was
+  // too brief to sample. It identifies a card; it is not another draw.
+  if(action===31&&leaves&&to===null){
+    const id=publicCardName(publicName);if(id===undefined)return [];
+    const prior=priorDraw?.action,left=prior?.get('datal'),middle=prior?.get('datac');
+    const drawn=left?.get('datatype')===1&&left.get('databyte0')===13&&left.get('databyte1')===opponent&&middle?.get('datatype')===3&&middle.get('databyte1')===1;
+    return [{key,index,type:'handReveal',cardId:id,...(drawn?{drawKey:priorDraw!.key}:{})}];
+  }
   const destination=to!==null&&Number.isInteger(to)&&to>=0&&to<=18&&(target===0||target===1);
   const activationLeaves=action===11&&leaves&&destination&&to!<=12;
   const moved=destination&&(movement.has(action)||activationLeaves);

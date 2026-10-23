@@ -33,6 +33,7 @@ export function publicHand(snapshot:Snapshot|null,stale=false):PublicHandView {
         break;
       }
       case 'enter':
+        if(event.cardId===null)break; // An anonymous draw adds no public identity.
         if(valid(event.cardId)){const old=known.get(event.cardId);known.set(event.cardId,{min:(old?.min??0)+1,max:(old?.max??0)+1});}
         else uncertain();
         break;
@@ -51,7 +52,7 @@ export function publicHand(snapshot:Snapshot|null,stale=false):PublicHandView {
   }
   const mismatch=!invalidCount&&[...known.values()].reduce((n,c)=>n+c.min,0)>hand!;
   const refreshing=stale||!!(snapshot.publicHandBusy??snapshot.busy);
-  if(invalidCount||mismatch)uncertain();
+  if((invalidCount||mismatch)&&!snapshot.publicHandBusy)uncertain();
   if(hand===0&&!refreshing)known.clear();
   const cards=[...known].filter(([,v])=>v.min>0).map(([id,v])=>({id,count:v.min})).sort((a,b)=>a.id-b.id);
   const uncertainCards=[...known].filter(([,v])=>v.max>v.min).map(([id,v])=>({id,count:v.max-v.min})).sort((a,b)=>a.id-b.id);

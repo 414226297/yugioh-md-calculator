@@ -110,7 +110,7 @@ Get-FileHash .\md-cannon-assistant-0.3.0-win-x64-1792494001692.zip -Algorithm SH
 
 ## 从源码运行
 
-需要 Windows、Node.js、pnpm，以及本机兼容的读取模块。开发验证使用 Node.js 24.19.0。
+当前源码需要 Windows、Node.js、pnpm 和系统 .NET Framework 4.x。默认使用项目原创的只读后端，无需 Untapped；仅支持已适配的游戏版本。开发验证使用 Node.js 24.19.0。
 
 ```powershell
 pnpm install --frozen-lockfile
@@ -131,10 +131,10 @@ node scripts/test-tray.mjs
 pnpm run package:portable
 ```
 
-便携包输出到 `release/`，可进一步验证实际 EXE 启动：
+当前源码的打包入口在 `release/` 输出单个 EXE，内嵌运行环境和读取程序。可以单独复制并双击启动，首次自动准备运行文件，随后复用缓存；不需要用户手动解压。此打包方式属于未发布的源码版本，历史 v0.3.0 发行附件仍为 ZIP。可验证实际单文件 EXE 启动：
 
 ```powershell
-node scripts/test-portable.mjs <ZIP路径>
+node scripts/test-single-exe.mjs <EXE路径>
 ```
 
 v0.3.0 发布前通过 124 项单元测试、23 组界面检查、盖牌浮窗与托盘检查，以及便携包解压启动验证。隔离测试不等同于所有实机对局场景已验证。

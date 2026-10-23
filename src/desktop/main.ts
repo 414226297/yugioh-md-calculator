@@ -18,18 +18,23 @@ const read=(name:string)=>{try{return JSON.parse(readFileSync(path.join(dataDir,
 function save(name:string,value:unknown){const file=path.join(dataDir,name);writeFileSync(file+'.tmp',JSON.stringify(value,null,2));renameSync(file+'.tmp',file);}
 let knownDecks:Record<string,unknown>={};let lastDeckSaved='';
 function companionDecks(){
-  if(process.env.MD_TEST_MODE==='1')return null;
+  if(process.env.MD_TEST_MODE==='1'||config.readerBackend==='owned')return null;
   try{return JSON.parse(readFileSync(path.join(process.env.APPDATA??app.getPath('appData'),'untapped-companion','ygom','decks.json'),'utf8'));}catch{return null;}
 }
 function payload(){return {...store.view(),notice,catalogMessage,config};}
 function publish(){if(win&&!win.isDestroyed())win.webContents.send('state',payload());overlay?.refresh();}
 function begin(){
   if(process.env.MD_TEST_MODE==='1')return;store.paused=false;store.error='';
+  if(config.readerBackend==='owned'){
+    const executable=path.join(root,'dist','reader','owned','MD.MemoryHost.exe');
+    if(!existsSync(executable)){host.stop();store.error='自有读取程序未构建，请重新构建助手。';publish();return;}
+    host.start({MD_READER_BACKEND:'owned',MD_OWNED_READER_EXE:executable,MD_INTERVAL:String(config.interval)});return;
+  }
   config={...config,modulePath:resolveModulePath(config.modulePath)};
   if(!path.isAbsolute(config.modulePath)||!existsSync(config.modulePath)){
     host.stop();store.error='未找到本机读取模块。请安装兼容的 Untapped Companion，或在设置中填写本机 .node 模块路径后重新连接。';publish();return;
   }
-  host.start({MD_SCRY_PATH:config.modulePath,MD_UNITY_VERSION:config.unityVersion,MD_INTERVAL:String(config.interval)});
+  host.start({MD_READER_BACKEND:'companion',MD_SCRY_PATH:config.modulePath,MD_UNITY_VERSION:config.unityVersion,MD_INTERVAL:String(config.interval)});
 }
 async function updateCatalog(){
   if(downloading)return;downloading=true;catalogMessage='正在获取中文卡名与卡片属性';publish();
@@ -73,7 +78,15 @@ app.whenReady().then(async()=>{
         knownDecks[captured.id]=captured;save('decks.json',knownDecks);
       }
     }
-    if(s.deckSource==='preparation'&&s.deckSelection&&!s.deck)s.deck=resolveSelectedDeck(s.deckSelection,knownDecks,companionDecks());
+    if(s.deckSource==='preparation'&&s.deckSelection&&!s.deck){
+      s.deck=resolveSelectedDeck(s.deckSelection,knownDecks,companionDecks());
+      // An editor snapshot without a server revision may be shown as a candidate
+      // for the user to verify, but must never be promoted to the live revision.
+      if(!s.deck&&config.readerBackend==='owned'){
+        const previous=read('deck.json');
+        if(validateDeck(previous)&&previous.id===s.deckSelection.id)s.deck=previous;
+      }
+    }
     store.accept(s);
     if(s.deck&&validateDeck(s.deck)){
       const signature=JSON.stringify({...s.deck,readAt:0});
@@ -122,6 +135,11 @@ app.whenReady().then(async()=>{
         case 'resume':case 'reconnect':begin();break;
         case 'catalog':await updateCatalog();break;
         case 'config':config=validateConfig(value);save('config.json',config);win.setSize(config.width,config.height);begin();break;
+        case 'overlay':
+          if(typeof value==='boolean')config=validateConfig({...config,overlayEnabled:value,handOverlayEnabled:value,backrowOverlayEnabled:value});
+          else if(value&&['hand','backrow'].includes(value.source)&&typeof value.enabled==='boolean')config=validateConfig({...config,[value.source==='hand'?'handOverlayEnabled':'backrowOverlayEnabled']:value.enabled});
+          else throw Error('悬浮窗开关无效');
+          save('config.json',config);break;
         case 'dismissNotice':notice='';break;
         case 'export':save('diagnostic.json',{time:new Date().toISOString(),app:'0.3.0',status:store.snapshot?.status,error:redactLocalPaths(store.error),logLength:store.snapshot?.logLength,inventoryQuality:store.view().inventory.quality,catalogCount:Object.keys(store.catalog).length});notice=`诊断已保存：${path.join(dataDir,'diagnostic.json')}`;break;
         default:throw Error('未知操作');

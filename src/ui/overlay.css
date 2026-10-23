@@ -41,3 +41,5 @@
 .report-effect::-webkit-scrollbar-thumb,.candidate-list::-webkit-scrollbar-thumb{background:none;border:3px solid transparent;border-image:url('assets/md/native/GUI_CommonScrollBar.png') 7 fill / 3px / 0 stretch}
 .report-art .picture{border:2px solid transparent;border-image-source:var(--frame);border-image-slice:40;border-image-width:2px}
 
+
+.tag.hand-tag{border:1px solid #d4bc72;background:#101b29ed;border-radius:3px;font-weight:700;font-size:clamp(7px,32vw,16px);box-shadow:inset 0 0 0 1px #ffffff10}.hand-tag.monster{color:#f3ae66}.hand-tag.spell{color:#56e3dd}.hand-tag.trap{color:#ea76c1}

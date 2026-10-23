@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist/desktop/main.js",
   "scripts": {
-    "build": "tsc && node scripts/copy-ui.mjs",
+    "build": "tsc && node scripts/copy-ui.mjs && node scripts/build-owned-reader.mjs",
     "typecheck": "tsc --noEmit",
     "start": "electron .",
     "package:portable": "pnpm run build && node scripts/package-portable.mjs",

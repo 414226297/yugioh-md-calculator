@@ -1,6 +1,6 @@
 import type {CardDetail} from '../data/card-detail.js';
 import type {SetCard} from '../domain/model.js';
-type Payload={kind:'tag'|'detail';theme:string;width?:number;height?:number;slot?:number;label?:string;category?:string;card?:SetCard;uncertain?:boolean;candidates?:{id:number;name:string;category?:string;rarity?:string}[]};
+type Payload={kind:'tag'|'detail';source?:'hand';name?:string;theme:string;width?:number;height?:number;slot?:number;label?:string;category?:string;card?:SetCard;uncertain?:boolean;candidates?:{id:number;name:string;category?:string;rarity?:string}[]};
 declare global {interface Window {overlay:{getState:()=>Promise<Payload|null>;select:(slot:number)=>Promise<void>;close:()=>Promise<void>;cardDetail:(id:number)=>Promise<{ok:boolean;detail?:CardDetail;error?:string}>;subscribe:(callback:(state:Payload)=>void)=>()=>void}}}
 const api=window.overlay,root=document.querySelector<HTMLElement>('#overlay')!;
 let data:Payload|null=null,signature='',request=0,selected=0;
@@ -38,7 +38,7 @@ async function detail(id:number){
 function render(next:Payload|null){
  data=next;const key=JSON.stringify(next);if(key===signature)return;signature=key;request++;
  root.replaceChildren();if(!next)return;document.documentElement.dataset.theme=next.theme;
- if(next.kind==='tag'){const button=node('button',next.label,`tag ${next.category??''}`);button.style.width=`${next.width}px`;button.style.height=`${next.height}px`;button.setAttribute('aria-label',`查看盖牌：${next.label}`);button.onclick=()=>void api.select(next.slot!);root.append(button);return;}
+ if(next.kind==='tag'){const button=node('button',next.label,`tag ${next.category??''} ${next.source==='hand'?'hand-tag':''}`);button.style.width=`${next.width}px`;button.style.height=`${next.height}px`;button.setAttribute('aria-label',`查看${next.source==='hand'?'公开手牌':'盖牌'}：${next.name??next.label}`);button.onclick=()=>void api.select(next.slot!);root.append(button);return;}
  const panel=node('section','','detail');
  const area=node('div');area.id='detail-content';panel.append(area);
  const certain=!!next.card?.confirmedId&&!next.uncertain&&!next.card.positionChanged;

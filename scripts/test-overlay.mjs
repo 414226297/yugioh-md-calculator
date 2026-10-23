@@ -6,7 +6,7 @@ const env={...process.env,MD_TEST_MODE:'1'};delete env.ELECTRON_RUN_AS_NODE;
 const app=await electron.launch({args:['.'],env,timeout:30000});
 try{
  const main=await app.firstWindow();await main.waitForLoadState('domcontentloaded');
- const config=await main.evaluate(async()=>{const s=await window.cannon.getState();return window.cannon.command('config',{...s.config,overlayEnabled:true});});assert.equal(config.ok,true);
+ const config=await main.evaluate(async()=>{const s=await window.cannon.getState();return window.cannon.command('config',{...s.config,overlayEnabled:true,handOverlayEnabled:true,backrowOverlayEnabled:true});});assert.equal(config.ok,true);
  const changes=[{key:'1:s',index:1,type:'fieldSet',slot:10,cardId:8682},{key:'2:s',index:2,type:'fieldSet',slot:9},{key:'3:s',index:3,type:'fieldSet',slot:8,cardId:5236}];
  const snapshot={...scene(),timestamp:Date.now(),session:'42:overlay',logLength:4,opponentSetSlots:[10,9],opponentPublicSlots:[8],publicHandObservation:{cards:[],changes}};
  const frame={active:true,pid:42,x:100,y:100,width:1360,height:765};
@@ -27,6 +27,29 @@ try{
  const native=()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().filter(w=>w.getTitle()==='盖牌提示').map(w=>({visible:w.isVisible(),focusable:w.isFocusable(),bounds:w.getBounds()})));
  let states=await native();assert.equal(states.length,2);assert.ok(states.every(w=>w.visible&&!w.focusable));
  for(const page of tags){const size=await page.locator('.tag').boundingBox();assert.ok(size.height<=21,'native minimum height must not enlarge the visible label');}
+ // Chain animations may temporarily omit field roots for several snapshots.
+ await app.evaluate(()=>{globalThis.overlayFixture.snapshot.busy=true;globalThis.overlayFixture.snapshot.opponentSetSlots=[];});
+ await new Promise(r=>setTimeout(r,350));
+ assert.equal((await native()).filter(w=>w.visible).length,2);
+ assert.equal(await trap.locator('.tag').innerText(),'陷');
+ await app.evaluate(()=>{globalThis.overlayFixture.snapshot.busy=false;globalThis.overlayFixture.snapshot.opponentSetSlots=[10,9];});
+ assert.equal(await main.locator('#public-hand').isVisible(),true);
+ assert.equal(await main.locator('#opponent-backrow').isVisible(),true);
+ const handToggle=main.getByRole('switch',{name:'公开手牌悬浮窗'});
+ const toggle=main.getByRole('switch',{name:'盖放魔陷悬浮窗'});
+ assert.equal(await toggle.innerText(),'悬浮窗');
+ assert.equal(await main.locator('#opponent-backrow .panel-title [role=switch]').count(),1);
+ assert.ok(await main.locator('#public-hand .panel-title, #opponent-backrow .panel-title').evaluateAll(headers=>headers.every(header=>[...header.children].every(child=>child.getBoundingClientRect().right<=header.getBoundingClientRect().right+1))));
+ await main.screenshot({path:'test-results/sidebar-overlay-switches.png'});
+ await handToggle.click();
+ await wait(async()=>await handToggle.getAttribute('aria-checked')==='false');
+ assert.equal((await native()).filter(w=>w.visible).length,2);
+ await toggle.click();
+ await wait(async()=>await toggle.getAttribute('aria-checked')==='false'&&(await native()).every(w=>!w.visible));
+ assert.equal(await main.locator('#opponent-backrow .set-card').count(),2);
+ assert.equal(await main.locator('#public-hand').isVisible(),true);
+ await toggle.click();
+ await wait(async()=>await toggle.getAttribute('aria-checked')==='true'&&(await native()).filter(w=>w.visible).length===2);
  const before=states.map(w=>w.bounds);
  await app.evaluate(()=>{globalThis.overlayFrame={active:true,pid:42,x:200,y:150,width:680,height:383};});
  await wait(async()=>{states=await native();return states.every((w,i)=>w.bounds.width<before[i].width);});

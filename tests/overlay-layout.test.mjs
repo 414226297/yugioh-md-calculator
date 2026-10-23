@@ -20,3 +20,20 @@ test('labels stay inside approved card backs and preserve viewport-relative posi
   assert.ok(detail.y+detail.height<=bounds.y+bounds.height*.81,'above avatar and LP');
  }
 });
+
+import {handOverlayBounds} from '../dist/domain/overlay-layout.js';
+test('known hand labels use total hand count for leftmost card spacing and scale with viewport',()=>{
+ const client={x:0,y:0,width:1366,height:768};
+ const a=handOverlayBounds(client,0,5),b=handOverlayBounds(client,1,5);
+ assert.equal(b.x-a.x,80);assert.equal(a.x+a.width/2,523);
+ assert.equal(a.y+a.height,57);
+ assert.equal(handOverlayBounds(client,0,2).x+23,643);
+ assert.ok(handOverlayBounds(client,0,6).y<handOverlayBounds(client,2,6).y);
+ for(const count of [1,2,3,4,5,6,10,20]){
+  const boxes=Array.from({length:count},(_,i)=>handOverlayBounds(client,i,count));
+  assert.ok(boxes.every((b,i)=>b.width>0&&b.x>=0&&b.x+b.width<=1366&&(!i||b.x>=boxes[i-1].x+boxes[i-1].width)));
+ }
+ const small=handOverlayBounds({x:-50,y:100,width:683,height:384},0,5);
+ assert.ok(Math.abs(small.x-(-50+a.x/2))<=1);assert.ok(Math.abs(small.y-(100+a.y/2))<=1);
+ assert.equal(handOverlayBounds(client,2,2),null);assert.equal(handOverlayBounds(client,0,0),null);
+});

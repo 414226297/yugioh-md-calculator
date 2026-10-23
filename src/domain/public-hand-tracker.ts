@@ -6,8 +6,11 @@ export class PublicHandTracker {
   private session='';
   private cursor=0;
   private count=0;
+  get committedHandCount(){return this.count;}
   private prefix='';
   private serial=0;
+  pending=false;
+  private pendingAt:number|null=null;
   private events:PublicHandEvent[]=[];
   private lastVisible='';
   private sets=new Map<number,SetCard>();
@@ -28,14 +31,14 @@ export class PublicHandTracker {
     for(const event of events){
       if(event.type==='invalidate')coverage=0;
       else if(event.type==='reveal')coverage=event.full?event.cards.length:Math.max(coverage,event.cards.length);
-      else if(event.type==='enter')coverage++;
+      else if(event.type==='enter'&&event.cardId!==null)coverage++;
       else if(event.type==='leave')coverage=Math.max(0,coverage-1);
     }
     const unknownPossible=coverage!==count||[...hand.cards,...hand.uncertainCards].some(c=>catalog[c.id]?.category==='monster')||possible.some(c=>!catalog[c.id]?.category);
     const searched=new Map<number,number>();
     for(const event of events){
       if(event.type==='invalidate'||event.type==='reveal'&&event.full)searched.clear();
-      if(event.type==='enter'&&event.source==='search')searched.set(event.cardId,(searched.get(event.cardId)??0)+1);
+      if(event.type==='enter'&&event.source==='search'&&event.cardId!==null)searched.set(event.cardId,(searched.get(event.cardId)??0)+1);
       if(event.type==='leave'&&event.cardId!==null)searched.set(event.cardId,Math.max(0,(searched.get(event.cardId)??0)-1));
     }
     return {candidates,unknownPossible,searchedCandidates:candidates.filter(id=>(searched.get(id)??0)>0)};
@@ -65,8 +68,14 @@ export class PublicHandTracker {
     }
     this.sets.set(change.slot,{...previous,slot:change.slot,candidates:id===undefined?[]:[id],unknownPossible:id===undefined,...(id===undefined?{}:{confirmedId:id,publicId:id,positionChanged:undefined})});
   }
-  reset(){this.session='';this.cursor=0;this.count=0;this.prefix='';this.events=[];this.lastVisible='';this.sets.clear();this.setCounts.clear();this.setHistories.clear();}
-  update(session:string,logLength:number,count:number,visible:number[],changes:HandChange[],_now:number,settled=true,slots?:number[],catalog:Record<number,Card>={}):PublicHandEvent[]{
+  private recordHandReveal(change:HandChange){
+    if(change.cardId===undefined)return;
+    const draw=change.drawKey?this.events.find(e=>e.type==='enter'&&e.origin===change.drawKey):undefined;
+    if(draw?.type==='enter'&&draw.cardId===null)draw.cardId=change.cardId;
+    else if(!draw)this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'reveal',cards:[change.cardId]});
+  }
+  reset(){this.session='';this.cursor=0;this.count=0;this.prefix='';this.events=[];this.lastVisible='';this.sets.clear();this.setCounts.clear();this.setHistories.clear();this.pending=false;this.pendingAt=null;}
+  update(session:string,logLength:number,count:number,visible:number[],changes:HandChange[],_now:number,settled=true,slots?:number[],catalog:Record<number,Card>={},fieldSettled=settled):PublicHandEvent[]{
     const fresh=session!==this.session;
     if(fresh){this.reset();this.session=session;}
     const index=Math.max(0,logLength-1);
@@ -74,6 +83,15 @@ export class PublicHandTracker {
     const prior=changes.filter(c=>c.index<this.cursor);
     // Elapsed time alone does not invalidate a complete, unchanged log prefix.
     const broken=!fresh&&(logLength<this.cursor||JSON.stringify(prior)!==this.prefix);
+    const addedChanges=changes.filter(c=>c.index>=this.cursor);
+    const expectedCount=this.count+addedChanges.filter(c=>c.type==='enter').length-addedChanges.filter(c=>c.type==='leave').length;
+    // During a summon the count and public movement log can arrive on separate
+    // frames. Do not commit the cursor or an irreversible invalidation mid-race.
+    if(!fresh&&!broken&&expectedCount!==count&&(visible.length!==count||count===0&&!settled)&&!addedChanges.some(c=>c.type==='invalidate')&&(!settled||this.pending)){
+      this.pendingAt??=_now;
+      if(_now-this.pendingAt<1500){this.pending=true;return this.events.map(e=>({...e}));}
+    }
+    this.pending=false;this.pendingAt=null;
     if(broken){
       // Keep prior disclosures as uncertain history after a log discontinuity.
       this.events=this.events.map(e=>({...e,index:0}));
@@ -89,11 +107,22 @@ export class PublicHandTracker {
         else if((change.type==='fieldReveal'||change.type==='fieldLeave')&&change.slot!==undefined)this.sets.delete(change.slot);
       }
     }
+    if(fresh){
+      // Replay identities explicitly disclosed in the public log. Unknown
+      // draws stay anonymous, and subsequent departures still consume them.
+      for(const change of changes){
+        if(change.type==='enter')this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'enter',cardId:change.cardId??null,origin:change.key,...(change.source?{source:change.source}:{})});
+        else if(change.type==='handReveal')this.recordHandReveal(change);
+        else if(change.type==='leave')this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'leave',cardId:change.cardId??null});
+        else if(change.type==='invalidate')this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'invalidate'});
+      }
+    }
     if(!fresh&&!broken){
       const added=changes.filter(c=>c.index>=this.cursor);
       const coherent=this.count+added.filter(c=>c.type==='enter').length-added.filter(c=>c.type==='leave').length===count&&!added.some(c=>c.type==='invalidate');
       let expected=this.count;
       for(const change of added){
+        if(change.type==='handReveal'){this.recordHandReveal(change);continue;}
         if(change.type==='fieldSet'||change.type==='fieldConfirm'){
           this.recordField(change);
           if(change.type==='fieldConfirm')this.refineSets(logLength,catalog);
@@ -115,7 +144,7 @@ export class PublicHandTracker {
         }
         if(change.type==='enter'){
           expected++;
-          if(change.cardId!==undefined)this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'enter',cardId:change.cardId,...(change.source?{source:change.source}:{})});
+          this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'enter',cardId:change.cardId??null,origin:change.key,...(change.source?{source:change.source}:{})});
           continue;
         }
         if(change.type==='leave'){
@@ -145,7 +174,7 @@ export class PublicHandTracker {
     this.lastVisible=current;this.cursor=logLength;this.count=count;
     this.prefix=JSON.stringify(changes);
     if(slots){
-      if(settled){
+      if(fieldSettled){
         const displaced=[...this.sets.values()].filter(s=>!slots.includes(s.slot));
         const appeared=slots.filter(slot=>!this.sets.has(slot));
         // A location-only rearrangement has no known identity mapping. Keep
@@ -155,12 +184,12 @@ export class PublicHandTracker {
           for(const slot of appeared)this.sets.set(slot,{slot,candidates,unknownPossible:true,positionChanged:true});
         }
       }
-      if(settled)for(const slot of this.sets.keys())if(!slots.includes(slot))this.sets.delete(slot);
+      if(fieldSettled)for(const slot of this.sets.keys())if(!slots.includes(slot))this.sets.delete(slot);
       for(const slot of slots)if(!this.sets.has(slot))this.sets.set(slot,{slot,candidates:[],unknownPossible:true});
       // Hand-count races can discard inferred history, but cannot erase a name
       // explicitly confirmed in the public field log. Replay zone lifetimes so
       // a previous occupant's identity never leaks into a reused slot.
-      if(settled){
+      if(fieldSettled){
         const explicit=new Map<number,number>();
         for(const change of changes){
           if(change.type==='invalidate'){if(change.scope!=='hand')explicit.clear();continue;}

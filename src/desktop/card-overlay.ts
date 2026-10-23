@@ -2,7 +2,7 @@ import {BrowserWindow,screen,ipcMain,type WebContents} from 'electron';
 import {fileURLToPath} from 'node:url';
 import type {DuelStore} from '../domain/store.js';
 import type {Config} from './config.js';
-import {overlayBounds,overlayDetailBounds,type Bounds} from '../domain/overlay-layout.js';
+import {overlayBounds,handOverlayBounds,overlayDetailBounds,type Bounds} from '../domain/overlay-layout.js';
 import {WindowTracker,type GameWindow} from './window-tracker.js';
 type View=ReturnType<DuelStore['view']>;
 type Entry={window:BrowserWindow;ready:boolean;signature:string;data:unknown};
@@ -72,21 +72,36 @@ export class CardOverlay {
  }
  refresh(){
   if(this.disposed)return;
-  const view=this.view(),config=this.config(),frame=this.frame,s=view.snapshot;
-  const visible=config.overlayEnabled&&frame.active&&Date.now()-this.frameAt<600&&!view.stale&&!view.paused&&s?.status==='duel'&&Number(s.session?.split(':')[0])===frame.pid&&[frame.x,frame.y,frame.width,frame.height].every(v=>typeof v==='number'&&Number.isFinite(v));
+  const view=this.view(),config=this.config(),frame=this.frame,s=view.overlaySnapshot;
+  const handEnabled=config.handOverlayEnabled??config.overlayEnabled,backrowEnabled=config.backrowOverlayEnabled??config.overlayEnabled;
+  const visible=(handEnabled||backrowEnabled)&&frame.active&&Date.now()-this.frameAt<600&&!view.paused&&s?.status==='duel'&&Number(s.session?.split(':')[0])===frame.pid&&[frame.x,frame.y,frame.width,frame.height].every(v=>typeof v==='number'&&Number.isFinite(v));
   const active=new Set<number>();
   if(visible){
    const client={x:frame.x!,y:frame.y!,width:frame.width!,height:frame.height!};
-   const cards=view.backrow.cards.filter(c=>c.slot>=7&&c.slot<=11&&s.opponentSetSlots?.includes(c.slot)&&!s.opponentPublicSlots?.includes(c.slot));
+   const cards=backrowEnabled?view.backrow.cards.filter(c=>c.slot>=7&&c.slot<=11&&!view.backrow.publicSlots.includes(c.slot)):[];
    for(const card of cards){
     const bounds=overlayBounds(client,card.slot,config.overlayOffsetX,config.overlayOffsetY);if(!bounds)continue;
     const category=card.confirmedId?view.catalog[card.confirmedId]?.category:undefined;
-    const label=card.positionChanged?'变动':card.confirmedId&&!view.backrow.uncertain?(category?{monster:'怪',spell:'魔',trap:'陷'}[category]:'卡'):'未知';
+    const label=card.positionChanged?'变动':card.confirmedId?(category?{monster:'怪',spell:'魔',trap:'陷'}[category]:'卡'):'未知';
     active.add(card.slot);this.place(card.slot,bounds,{kind:'tag',slot:card.slot,label,theme:config.theme,category});
    }
-   const chosen=cards.find(c=>c.slot===this.selected);
+   const handCards:typeof cards=[];
+   const handCount=s.counts.opponentHand;
+   let handIndex=0;
+   if(handEnabled&&handCount!==null&&Number.isInteger(handCount)&&handCount>0){
+    for(const card of view.publicHand.cards){
+     for(let copy=0;copy<card.count&&handIndex<handCount;copy++,handIndex++){
+      const bounds=handOverlayBounds(client,handIndex,handCount);if(!bounds)continue;
+      // Stable identity prevents an open report changing when another card leaves.
+      const slot=-(card.id*128+copy+1),category=view.catalog[card.id]?.category;
+      handCards.push({slot,candidates:[card.id],confirmedId:card.id,unknownPossible:false});
+      active.add(slot);this.place(slot,bounds,{kind:'tag',source:'hand',slot,label:category?{monster:'怪',spell:'魔',trap:'陷'}[category]:'卡',theme:config.theme,category,name:view.catalog[card.id]?.name});
+     }
+    }
+   }
+   const chosen=[...cards,...handCards].find(c=>c.slot===this.selected);
    if(chosen&&active.has(chosen.slot)){
-    active.add(0);this.place(0,overlayDetailBounds(client),{kind:'detail',theme:config.theme,card:chosen,uncertain:view.backrow.uncertain,candidates:chosen.candidates.map(id=>({id,name:view.catalog[id]?.name??`卡片 ${id}`,category:view.catalog[id]?.category,rarity:view.catalog[id]?.rarity}))});
+    active.add(0);this.place(0,overlayDetailBounds(client),{kind:'detail',theme:config.theme,card:chosen,uncertain:!chosen.confirmedId,candidates:chosen.candidates.map(id=>({id,name:view.catalog[id]?.name??`卡片 ${id}`,category:view.catalog[id]?.category,rarity:view.catalog[id]?.rarity}))});
    }else this.selected=null;
   }else this.selected=null;
   for(const [key,entry] of this.entries)if(!active.has(key)&&!entry.window.isDestroyed())entry.window.hide();

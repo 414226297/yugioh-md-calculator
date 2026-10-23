@@ -17,8 +17,8 @@ test('reader exits without terminating host; host reports failure', async () => 
   assert.equal(host.child, null);
   host.stop();
 });
-test('local native dependency loads and exposes required read APIs', () => {
-  const native = path.join(process.env.LOCALAPPDATA, 'Programs/untapped-companion/resources/app.asar.unpacked/node_modules/untapped-scry/lib/binding/napi-v5/untapped-scry.node');
+test('optional companion module exposes required read APIs', {skip: !process.env.MD_TEST_COMPANION}, () => {
+  const native = process.env.MD_SCRY_PATH || path.join(process.env.LOCALAPPDATA, 'Programs/untapped-companion/resources/app.asar.unpacked/node_modules/untapped-scry/lib/binding/napi-v5/untapped-scry.node');
   assert.ok(existsSync(native), '本机读取模块不存在');
   const s = createRequire(import.meta.url)(native);
   assert.equal(typeof s.Scry.connect, 'function');

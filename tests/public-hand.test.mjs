@@ -58,10 +58,10 @@ test('store preserves records through busy frames, read errors, worker recreatio
  store.paused=false;assert.equal(store.view().publicHand.cards.length,2);
  store.accept(observed([],{session:'new-duel'}));assert.deepEqual(store.view().publicHand.uncertainCards,[]);assert.deepEqual(store.view().publicHand.cards,[]);
 });
-test('confirmed zero hand clears records while a transitional zero preserves uncertain history',()=>{
+test('confirmed zero hand clears records while a transitional zero preserves confirmed history',()=>{
  const store=new DuelStore();const obs=(count,cards,busy)=>({...scene(),session:'zero',logLength:10,counts:{...scene().counts,opponentHand:count},publicHandObservation:{cards,changes:[]},busy});
  store.accept(obs(2,[100,200],false));
- store.accept(obs(0,[],true));assert.equal(store.view().publicHand.uncertainCards.length,2);
+ store.accept(obs(0,[],true));assert.equal(store.view().publicHand.cards.length,2);
  store.accept(obs(0,[],false));assert.deepEqual(store.view().publicHand.cards,[]);assert.deepEqual(store.view().publicHand.uncertainCards,[]);
 });
 
@@ -75,4 +75,52 @@ test('unrelated busy scene updates do not repeatedly toggle hand certainty',()=>
   assert.equal(store.view().publicHand.cards.length,2);assert.equal(store.view().publicHand.uncertainCards.length,0);
  }
  store.paused=true;assert.equal(store.view().publicHand.cards.length,2);
+});
+
+test('summon count/log races retain other known cards and consume departure exactly once',()=>{
+ for(const logFirst of [false,true]){
+  const store=new DuelStore();const base=scene();
+  const snap=(time,count,changes,busy)=>({...base,session:'42:race',timestamp:time,logLength:changes.length?11:10,busy,counts:{...base.counts,opponentHand:count},publicHandObservation:{cards:[],changes}});
+  store.accept({...snap(1000,3,[],false),publicHandObservation:{cards:[100,200,300],changes:[]}});
+  const leave={key:'10:leave',index:10,type:'leave',cardId:100};
+  store.accept(snap(1100,logFirst?3:2,logFirst?[leave]:[],true));
+  assert.equal(store.view(1100).publicHand.cards.length,3);
+  store.accept(snap(1200,logFirst?3:2,logFirst?[leave]:[],true));
+  assert.equal(store.view(1200).publicHand.cards.length,3);
+  store.accept(snap(1300,2,[leave],false));
+  assert.deepEqual(store.view(1300).publicHand.cards,[{id:200,count:1},{id:300,count:1}]);
+  store.accept(snap(1400,2,[leave],false));
+  assert.deepEqual(store.view(1400).publicHand.uncertainCards,[]);
+ }
+});
+test('unresolved summon mismatch eventually becomes uncertain instead of inventing identities',()=>{
+ const store=new DuelStore(),base=scene();
+ const snap=(timestamp,busy,count,cards)=>({...base,timestamp,busy,counts:{...base.counts,opponentHand:count},publicHandObservation:{cards,changes:[]}});
+ store.accept(snap(1000,false,3,[100,200,300]));
+ store.accept(snap(1100,true,2,[]));
+ assert.equal(store.view(1100).publicHand.cards.length,3);
+ store.accept(snap(2800,false,2,[]));
+ assert.equal(store.view(2800).publicHand.cards.length,0);
+ assert.equal(store.view(2800).publicHand.uncertainCards.length,3);
+});
+
+test('overlay memory survives chain read gaps and missing busy roots, but obeys public departures and menu exit',()=>{
+ const store=new DuelStore();store.catalog={300:{id:300,category:'trap'}};
+ const changes=[{key:'4:set',index:4,type:'fieldSet',slot:9,cardId:300}];
+ const base={...scene(),session:'42:chain',logLength:10,opponentSetSlots:[9],opponentPublicSlots:[],publicHandObservation:{cards:[100,200],changes}};
+ store.accept(base);
+ const busy={...base,busy:true,opponentSetSlots:[],publicHandObservation:{cards:[],changes}};
+ store.accept(busy);store.accept(busy);
+ assert.equal(store.view().backrow.cards[0].confirmedId,300);
+ store.accept({...scene(),status:'error',session:null,reason:'场面更新中'});
+ const retained=store.view(Date.now()+10000);
+ assert.equal(retained.stale,true);assert.equal(retained.overlaySnapshot.session,'42:chain');
+ assert.equal(retained.overlaySnapshot.counts.opponentHand,2);
+ assert.equal(retained.backrow.cards[0].confirmedId,300);assert.equal(retained.publicHand.cards.length,2);
+ const departure=[...changes,{key:'10:field',index:10,type:'fieldLeave',slot:9},{key:'11:hand',index:11,type:'leave',cardId:100}];
+ store.accept({...busy,logLength:12,counts:{...base.counts,opponentHand:1},publicHandObservation:{cards:[],changes:departure}});
+ assert.deepEqual(store.view().backrow.cards,[]);assert.deepEqual(store.view().publicHand.cards,[{id:200,count:1}]);
+ assert.equal(store.view().overlaySnapshot.counts.opponentHand,1);
+ store.accept({...scene(),status:'menu',session:null});
+ assert.equal(store.view().overlaySnapshot,null);assert.deepEqual(store.view().backrow.cards,[]);
 });

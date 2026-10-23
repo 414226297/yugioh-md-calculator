@@ -12,10 +12,11 @@ export class DuelStore {
   private deckPrepared=false;
   private publicHands=new PublicHandTracker();
   private publicHandMemory:Snapshot|null=null;
+  private overlayMemory:Snapshot|null=null;
   private handSignature='';
   accept(s:Snapshot){
     const newDuel=s.status==='duel'&&!!s.session&&s.session!==this.lastSession;
-    if(newDuel||s.status==='menu'||s.status==='waiting'){this.publicHands.reset();this.publicHandMemory=null;this.handSignature='';}
+    if(newDuel||s.status==='menu'||s.status==='waiting'){this.publicHands.reset();this.publicHandMemory=null;this.overlayMemory=null;this.handSignature='';}
     if(s.status==='duel'&&s.session){
       const observation=s.publicHandObservation;
       if(observation&&s.counts.opponentHand!==null){
@@ -23,9 +24,13 @@ export class DuelStore {
         const signature=JSON.stringify([s.counts.opponentHand,[...observation.cards].sort((a,b)=>a-b),observation.changes,s.opponentSetSlots]);
         const publicHandBusy=!!s.busy&&signature!==this.handSignature;
         this.handSignature=signature;
-        s={...s,publicHandBusy,publicHandEvents:this.publicHands.update(s.session,s.logLength,s.counts.opponentHand,observation.cards,observation.changes,s.timestamp,!publicHandBusy,s.opponentSetSlots,this.catalog)};
+        const publicHandEvents=this.publicHands.update(s.session,s.logLength,s.counts.opponentHand,observation.cards,observation.changes,s.timestamp,!publicHandBusy,s.opponentSetSlots,this.catalog,!s.busy);
+        s={...s,publicHandBusy:publicHandBusy||this.publicHands.pending,publicHandEvents};
       }
-      if(s.publicHandEvents)this.publicHandMemory=s;
+      if(s.publicHandEvents)this.publicHandMemory=this.publicHands.pending?{...s,counts:{...s.counts,opponentHand:this.publicHands.committedHandCount}}:s;
+      // Public records survive read gaps; counts used by the calculator remain
+      // the current snapshot. Pending hand/log races keep the prior hand layout.
+      this.overlayMemory={...s,counts:{...s.counts,opponentHand:this.publicHandMemory?.counts.opponentHand??s.counts.opponentHand},opponentPublicSlots:s.opponentPublicSlots??this.overlayMemory?.opponentPublicSlots};
     }
     if(s.status==='duel'&&s.session!==this.lastSession){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=this.deckPrepared&&this.deck?s.session:null;this.deckPrepared=false;this.lastSession=s.session;}
     if(s.status==='menu'||s.status==='waiting'){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=null;this.lastSession=null;}
@@ -34,6 +39,10 @@ export class DuelStore {
     if(s.status==='menu'&&s.deckSource==='preparation'){
       if(s.deck&&validateDeck(s.deck)&&s.deck.id===s.deckSelection?.id&&s.deck.revision===s.deckSelection.revision){
         this.deck=s.deck;this.deckVerified=true;this.deckManual=false;this.deckPrepared=true;
+      }else if(s.deck&&validateDeck(s.deck)&&s.deck.id===s.deckSelection?.id){
+        // A local editor copy can help the user verify composition, but the
+        // unknown server revision keeps it unusable until explicit confirmation.
+        this.deck=s.deck;this.deckVerified=false;this.deckManual=true;this.deckPrepared=false;this.boundSession=null;
       }else{
         this.deck=null;this.deckVerified=false;this.deckManual=false;this.deckPrepared=false;
       }
@@ -80,7 +89,7 @@ export class DuelStore {
     const blocked=stale||s?.status!=='duel'||missing||this.boundSession!==s?.session||!!s?.busy;
     const result=blocked?{status:'uncertain' as const,plans:[],reason:this.error||(this.paused?'读取已暂停':stale?'数据过期，等待更新':s?.status==='waiting'?'等待 MD 启动':s?.status!=='duel'?'等待进入对局':missing?'卡片属性尚未获取完整':this.boundSession!==s?.session?'请确认本次使用的牌组':'场面处理中，等待稳定')}:solve(counts,monsters,inventory,this.catalog);
     const handSnapshot=this.publicHandMemory??s;
-    const backrow={publicSlots:s?.status==='duel'?s.opponentPublicSlots??[]:[],count:s?.status==='duel'?s.opponentSetSlots?.length??null:null,cards:this.publicHands.setCards(),uncertain:stale||!s?.publicHandObservation||!!s.publicHandBusy||s.opponentSetSlots===undefined};
-    return {snapshot:s,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,backrow,publicHand:publicHand(handSnapshot,stale||handSnapshot!==s),stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckAttributesReady:!missing,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
+    const backrow={publicSlots:this.overlayMemory?.opponentPublicSlots??[],count:this.overlayMemory?this.publicHands.setCards().length:null,cards:this.publicHands.setCards(),uncertain:stale||!s?.publicHandObservation||!!s.publicHandBusy||s.opponentSetSlots===undefined};
+    return {snapshot:s,overlaySnapshot:this.overlayMemory,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,backrow,publicHand:publicHand(handSnapshot,stale||handSnapshot!==s),stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckAttributesReady:!missing,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
   }
 }

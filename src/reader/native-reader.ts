@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { emptyCounts, type Deck, type Move, type Snapshot } from '../domain/model.js';
 import {dictionary,list,type Ref} from './collections.js';
 import {readPreparation} from './preparation.js';
+import {SnapshotUpdatingError} from './snapshot-error.js';
 import {handChange,visibleHand,facedownBackrow,faceupBackrow,type HandChange} from './public-hand.js';
 export {dictionary,list} from './collections.js';
 const num = (v: unknown) => { if(!Number.isInteger(v) || (v as number)<0 || (v as number)>1000)throw Error('读数异常');return v as number; };
@@ -33,11 +34,65 @@ export function readActions(log: Ref, myTeam: number) {
     // Multi-card batches cannot share one identity; a single-item batch can.
     const previous=base[i-1];
     const publicName=items.length===1&&previous?.get('loglabel')==='ShowCardName'?names[previous.get('dataindex')]:undefined;
-    for(let j=0;j<items.length;j++){if(!items[j])throw Error('日志条目缺失');const m=decodeAction(items[j],i,j,myTeam,runningCard);if(m)moves.push(m);handChanges.push(...handChange(items[j],i,j,myTeam,publicName));}
+    const beforeName=base[i-2],drawAction=publicName&&beforeName?.get('loglabel')==='ShowAction'?singles[beforeName.get('dataindex')]:undefined;
+    const priorDraw=drawAction?{key:`${i-2}:0`,action:drawAction}:undefined;
+    for(let j=0;j<items.length;j++){if(!items[j])throw Error('日志条目缺失');const m=decodeAction(items[j],i,j,myTeam,runningCard);if(m)moves.push(m);handChanges.push(...handChange(items[j],i,j,myTeam,publicName,priorDraw));}
   }
   // The opening draw blocks must be present. Absence is not silently treated as a complete history.
   const opening = base.slice(0,8).filter(x=>x.get('loglabel')==='CardMoveMulti').length>=2;
   return {moves,logLength:base.length,completeLog:opening,handChanges};
+}
+type ActionHistory={session:string;team:number;length:number;baseIdentity:number|null;frames:number;prefix:Array<{label:string;index:number}>;runningCard:number;moves:Move[];handChanges:HandChange[]};
+function indexed(ref:Ref|null,index:number,max=5000):Ref|undefined{
+  if(!ref||!Number.isInteger(index)||index<0)return;
+  const size=ref.get('_size');if(!Number.isInteger(size)||size<0||size>max)throw Error('列表长度异常，需要重新读取');
+  if(index>=size)return;
+  return ref.get('_items').at(index);
+}
+/** Read the immutable log prefix from cache; sample anchors each frame and fully
+ * revalidate periodically. List growth/reallocation and any mismatch fall back
+ * to a complete prefix read before history can be reused. */
+export function readActionsIncremental(log:Ref,myTeam:number,session:string,previous:ActionHistory|null){
+  const base=log.get('m_LogBaseItemList') as Ref;
+  const length=base.get('_size');if(!Number.isInteger(length)||length<0||length>10000)throw Error('列表长度异常，需要重新读取');
+  const items=base.get('_items') as Ref;
+  let baseIdentity:number|null=null;try{const address=items.getBaseAddress?.();if(typeof address==='number'&&Number.isSafeInteger(address)&&address>0)baseIdentity=address;}catch{}
+  const at=(i:number)=>{const item=(items as Ref&{at:(index:number)=>Ref}).at(i);return {label:item.get('loglabel'),index:item.get('dataindex')};};
+  const same=(a:{label:string;index:number},b:{label:string;index:number})=>a.label===b.label&&a.index===b.index;
+  const candidate=!!previous&&previous.session===session&&previous.team===myTeam&&length>=previous.length;
+  let fast=candidate&&baseIdentity!==null&&previous!.baseIdentity===baseIdentity&&previous!.frames%64!==0;
+  if(fast){
+    const anchors=new Set<number>();for(let i=0;i<Math.min(3,previous!.length);i++)anchors.add(i);
+    if(previous!.length>6)anchors.add(Math.floor(previous!.length/2));
+    for(let i=Math.max(0,previous!.length-3);i<previous!.length;i++)anchors.add(i);
+    for(const i of anchors)if(!same(at(i),previous!.prefix[i])){fast=false;break;}
+  }
+  let prefix:Array<{label:string;index:number}>;
+  if(fast){prefix=previous!.prefix.slice();for(let i=previous!.length;i<length;i++)prefix.push(at(i));}
+  else prefix=Array.from({length},(_,i)=>at(i));
+  const reusable=!!candidate&&previous!.prefix.every((entry,i)=>same(entry,prefix[i]));
+  const start=reusable?previous!.length:0;
+  const singles=log.get('m_DataList_ShowAction') as Ref,batches=log.get('m_DataList_MoveMulti') as Ref,chains=log.get('m_DataList_ShowChain') as Ref,names=log.get('m_DataList_ShowCardName') as Ref;
+  const moves=reusable?previous!.moves.slice():[],handChanges=reusable?previous!.handChanges.slice():[];
+  let runningCard=reusable?previous!.runningCard:0;
+  for(let i=start;i<length;i++){
+    const {label,index}=prefix[i];
+    if(label==='ShowChain'){
+      const chain=indexed(chains,index);if(chain){const type=chain.get('type');if(type===1)runningCard=chain.get('cardid');else if(type===3)runningCard=0;}
+    }
+    if(label==='ShowTurn'||label==='ShowPhase')runningCard=0;
+    if(!['ShowAction','CardMoveMulti','SeparateLine','CardMoveMultiHeader','ShowFirstPlayer','ShowTurn','ShowPhase','ShowChain','ShowTag','ShowCardName','ShowText'].includes(label))handChanges.push({key:`${i}:unknown`,index:i,type:'invalidate'});
+    const batch=label==='CardMoveMulti'?indexed(batches,index):undefined;
+    const items=label==='ShowAction'?[indexed(singles,index)]:label==='CardMoveMulti'?list(batch?.get('actionDatas'),1000):[];
+    const prior=i>0?prefix[i-1]:undefined;
+    const publicName=items.length===1&&prior?.label==='ShowCardName'?indexed(names,prior.index):undefined;
+    const beforeName=i>1?prefix[i-2]:undefined,drawAction=publicName&&beforeName?.label==='ShowAction'?indexed(singles,beforeName.index):undefined;
+    const priorDraw=drawAction?{key:`${i-2}:0`,action:drawAction}:undefined;
+    for(let j=0;j<items.length;j++){const item=items[j];if(!item)throw Error('日志条目缺失');const move=decodeAction(item,i,j,myTeam,runningCard);if(move)moves.push(move);handChanges.push(...handChange(item,i,j,myTeam,publicName,priorDraw));}
+  }
+  const completeLog=prefix.slice(0,8).filter(x=>x.label==='CardMoveMulti').length>=2;
+  const history:ActionHistory={session,team:myTeam,length:prefix.length,baseIdentity,frames:reusable?previous!.frames+1:1,prefix,runningCard,moves,handChanges};
+  return {result:{moves,logLength:length,completeLog,handChanges},history};
 }
 /** Input permission also changes at prompts/opponent turns; it is not a scene-stability signal. */
 export class SceneStability {
@@ -51,13 +106,18 @@ export class SceneStability {
 }
 export class NativeReader {
   private context: any;
+  private deferStability=false;
   private stability = new SceneStability();
   private preparationSeen=false;
-  constructor(modulePath: string, private pid: number, unityVersion: string) {
+  private actionHistory:ActionHistory|null=null;
+  private pendingActionHistory:ActionHistory|null=null;
+  constructor(modulePath: string, private pid: number, unityVersion: string, context?:{getClass:(name:string)=>any}) {
+    if(context){this.context=context;this.deferStability=true;return;}
     const native=createRequire(import.meta.url)(modulePath);
     this.context=new native.Il2CppScry(native.Scry.connect(pid),{enumerateProperties:false}).getMetadataContext(unityVersion,'DuelClient');
   }
   read(): Snapshot {
+    if(this.deferStability)this.pendingActionHistory=null;
     const c=this.context;
     const views=list(c.getClass('YgomGame.Menu.ContentViewControllerManager').get('Instance')?.get('viewStack'),30);
     const current=views.at(-1);let deck: Deck|null=null;
@@ -84,7 +144,7 @@ export class NativeReader {
       this.preparationSeen=views.some(v=>v.getClassName()==='YgomGame.Colosseum.ColosseumInfoViewController');
     }
     const d=c.getClass('YgomGame.Duel.DuelClient').get('instance');
-    if(!d&&current?.getClassName()?.startsWith('YgomGame.Duel.'))throw Error('对局场面更新中，保留记录等待重读');
+    if(!d&&current?.getClassName()?.startsWith('YgomGame.Duel.'))throw new SnapshotUpdatingError('对局场面更新中，保留记录等待重读');
     if(!d||!current?.getClassName()?.startsWith('YgomGame.Duel.')){this.stability=new SceneStability();return result;}
     const w=d.get('effectWorker'),g=w.get('goManager'),f=g.get('duelField'),h=d.get('handCardManager'),log=d.get('duelHUD').get('duellog');
     const myTeam=num(f.get('nearHandPlace').get('team'));if(myTeam>1)throw Error('无法确认玩家方位');
@@ -112,10 +172,13 @@ export class NativeReader {
       if(place.get('position')===14)result.extraCount=num(place.get('localCardNum'));
       if(place.get('position')===17)result.banishedCount=num(place.get('localCardNum'));
     }
-    const {handChanges,...events}=readActions(log,myTeam);
-    if(before!==log.get('m_LogBaseItemList').get('_size'))throw Error('场面更新中，等待稳定数据');
     let identity='';try{const settings=dictionary(d.get('engineInitializer').get('duelSettings'));identity=String(settings.get('duel_start_timestamp')??'');}catch{}
-    const session=`${this.pid}:${d.getBaseAddress()}:${identity}`,timestamp=Date.now();
+    const session=`${this.pid}:${d.getBaseAddress()}:${identity}`;
+    let actionData:ReturnType<typeof readActions>;
+    if(this.deferStability){const incremental=readActionsIncremental(log,myTeam,session,this.actionHistory);actionData=incremental.result;this.pendingActionHistory=incremental.history;}
+    else actionData=readActions(log,myTeam);
+    const {handChanges,...events}=actionData;
+    if(before!==log.get('m_LogBaseItemList').get('_size'))throw new SnapshotUpdatingError('场面更新中，等待稳定数据');
     let publicHandObservation:Snapshot['publicHandObservation'];
     try{
       const after=list(h.get('farHandInfoList'),200);
@@ -123,6 +186,17 @@ export class NativeReader {
       publicHandObservation={cards:displayed,changes:handChanges};
     }catch{}
     const key=JSON.stringify({session,counts,monsters:result.monsters,extra:result.extraCount,banished:result.banishedCount,events,publicHandObservation});
-    return {...result,...events,publicHandObservation,status:'duel',counts,myTeam,busy:this.stability.busy(key,timestamp),session,timestamp};
+    // Timestamp after all consistency reads so expensive snapshots don't
+    // age themselves before they are delivered to the host process.
+    const timestamp=Date.now();
+    return {...result,...events,publicHandObservation,status:'duel',counts,myTeam,busy:this.deferStability?undefined:this.stability.busy(key,timestamp),session,timestamp};
+  }
+  /** OwnedContext calls this only after its post-read memory consistency pass. */
+  finalizeOwned(snapshot:Snapshot):Snapshot{
+    const timestamp=Date.now();
+    if(snapshot.status==='duel'&&this.pendingActionHistory)this.actionHistory=this.pendingActionHistory;
+    if(snapshot.status!=='duel'||!snapshot.session)return {...snapshot,timestamp};
+    const key=JSON.stringify({session:snapshot.session,counts:snapshot.counts,monsters:snapshot.monsters,extra:snapshot.extraCount,banished:snapshot.banishedCount,events:{moves:snapshot.moves,logLength:snapshot.logLength,completeLog:snapshot.completeLog},publicHandObservation:snapshot.publicHandObservation});
+    return {...snapshot,timestamp,busy:this.stability.busy(key,timestamp)};
   }
 }

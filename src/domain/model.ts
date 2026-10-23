@@ -10,11 +10,11 @@ export interface Move { key: string; index: number; action: number; cardId: numb
 /** Public display observations and sanitized log evidence; no hidden hand identities. */
 export type PublicHandEvent = { key:string; index:number } & (
   { type:'reveal'; cards:number[]; full?:boolean } |
-  { type:'enter'; cardId:number; source?:'search' } |
+  { type:'enter'; cardId:number|null; source?:'search'; origin?:string } |
   { type:'leave'; cardId:number|null } |
   { type:'invalidate' }
 );
-export interface HandChange {key:string;index:number;type:'enter'|'leave'|'invalidate'|'fieldReveal'|'fieldLeave'|'fieldSet'|'fieldConfirm';scope?:'hand';cardId?:number;slot?:number;source?:'search'}
+export interface HandChange {key:string;index:number;type:'enter'|'leave'|'handReveal'|'invalidate'|'fieldReveal'|'fieldLeave'|'fieldSet'|'fieldConfirm';scope?:'hand';cardId?:number;slot?:number;source?:'search';drawKey?:string}
 export interface SetCard {slot:number;candidates:number[];unknownPossible:boolean;confirmedId?:number;publicId?:number;origin?:string;searchedCandidates?:number[];positionChanged?:boolean}
 export interface Snapshot {
   status: 'waiting' | 'menu' | 'duel' | 'error'; session: string | null; timestamp: number;

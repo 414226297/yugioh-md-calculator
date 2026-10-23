@@ -6,7 +6,7 @@ const app=await electron.launch({args:['.'],env,timeout:30000});
 const failures=[];const results=[];
 try{
  const page=await app.firstWindow();page.on('pageerror',e=>failures.push(e.message));await page.waitForLoadState('domcontentloaded');
- await page.evaluate(async()=>{const s=await window.cannon.getState();await window.cannon.command('config',{...s.config,overlayEnabled:false});});
+ await page.evaluate(async()=>{const s=await window.cannon.getState();await window.cannon.command('config',{...s.config,overlayEnabled:false,handOverlayEnabled:false,backrowOverlayEnabled:false});});
  const inject=async(snapshot,inventory)=>{
    snapshot.timestamp=Date.now();
    if(!snapshot.publicHandObservation&&!snapshot.publicHandEvents)snapshot.publicHandEvents=[];
@@ -222,6 +222,18 @@ try{
  await page.locator('[data-action="home"]').click();
  await page.screenshot({path:'test-results/theme-dark.png'});
  results.push('THEME persisted light/dark selection and six double-digit tiles at 300px');
+ await page.getByRole('button',{name:'设置',exact:true}).click();
+ const previousModule=await page.locator('#modulePath').inputValue();
+ await page.locator('#readerBackend').selectOption('owned');
+ await page.locator('#modulePath').fill('');
+ await page.getByRole('button',{name:'保存设置',exact:true}).click();
+ await page.waitForFunction(async()=>(await window.cannon.getState()).config.readerBackend==='owned');
+ assert.equal(JSON.parse(readFileSync('test-results/app-data/config.json','utf8')).modulePath,'');
+ await page.locator('#readerBackend').selectOption('companion');
+ await page.locator('#modulePath').fill(previousModule);
+ await page.getByRole('button',{name:'保存设置',exact:true}).click();
+ await page.waitForFunction(async()=>(await window.cannon.getState()).config.readerBackend==='companion');
+ results.push('OWNED settings persist with empty proprietary module path and switch back');
  assert.deepEqual(failures,[]);
  for(const r of results)console.log('PASS',r);
 }catch(error){const page=(await app.windows())[0];if(page){mkdirSync('test-results',{recursive:true});await page.screenshot({path:'test-results/ui-failure.png'});console.error('UI failure state',await page.locator('#content').innerText());}throw error;}finally{await app.close();}
