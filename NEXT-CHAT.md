@@ -2,10 +2,16 @@
 
 更新时间：2026-10-25（中国时间）。本地工作区：C:/Users/yuhaowen/Downloads/工作区02。
 
-## 首先处理
+## 本地提交已完成（2026-10-25）
+
+已通过权限升级完成原先受限的本地 Git 提交：`cca1e6d`（feat: add settings main window and configurable duel overlays），共43个项目文件。未推送、发布或创建Release；release、local-data、test-results未纳入提交。
+
+提交前暂存差异格式检查通过。本轮未修改代码、未重新打包或重复测试；下方构建、单测与实窗限制记录继续适用。本段及HANDOFF中的提交结果另作后续文档提交。原本地提交待办已关闭。
+
+## 原交接待办（已完成，保留历史）
 
 用户要求打包EXE、重写README、保存本地Git，之后决定转入本地新对话。
-前两项已完成；本地Git提交尚未完成，仍是待办，不需要重新询问授权。
+原交接时前两项已完成；本地Git提交当时尚未完成，现已完成，见上方记录。
 
 当前会话对.git只有读取权限，git add及commit均报“Unable to create .git/index.lock: Permission denied”，不是遗留锁文件问题。不要删除锁文件或尝试绕过权限。用户已获知需要在有写权限的本地会话接续。
 本轮重新核实最新提交仍为a3b9443（feat: add owned reader, persistent overlays and single-file Windows package），当前改动均未提交。没有推送、发布或创建Release。
