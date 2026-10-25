@@ -1,25 +1,22 @@
+import {modules,defaultSidebarModules,type ModuleId} from '../domain/modules.js';
+import {renderSidebar} from './sidebar.js';
 import {targetKinds,type Stock,type Monster} from '../domain/model.js';
-import {groupStock} from '../domain/solver.js';
 import type {DuelStore} from '../domain/store.js';
 import type {CardDetail} from '../data/card-detail.js';
 import type {Config} from '../desktop/config.js';
 type View=ReturnType<DuelStore['view']>&{notice:string;catalogMessage:string;config:Config};
-declare global {interface Window {cannon:{version:string;cardDetail:(id:number)=>Promise<{ok:boolean;detail?:CardDetail;error?:string}>;getState:()=>Promise<View>;command:(name:string,value?:unknown)=>Promise<{ok:boolean;error?:string}>;subscribe:(cb:(s:View)=>void)=>()=>void}}}
+declare global {interface Window {cannon:{version:string;sidebarLayout:(value:{height:number;signature:string})=>Promise<void>;onSettingsPage:(callback:(page:string)=>void)=>()=>void;cardDetail:(id:number)=>Promise<{ok:boolean;detail?:CardDetail;error?:string}>;getState:()=>Promise<View>;command:(name:string,value?:unknown)=>Promise<{ok:boolean;error?:string}>;subscribe:(cb:(s:View)=>void)=>()=>void}}}
 const api=window.cannon,content=document.querySelector<HTMLElement>('#content')!;
-let state:View;let page='home';let stockDraft:{extra:Stock[];banished:Stock[]}|null=null;
+const params=new URLSearchParams(location.search),isSettings=params.get('window')==='settings';
+let state:View;let page=isSettings?'settings':'home';let stockDraft:{extra:Stock[];banished:Stock[]}|null=null;
 let deckDraft:View['deck']=null;
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const val=(n:number|null)=>n===null?'—':String(n);
 const unit=(kind:string)=>kind==='rank'?'阶':'星';
 const button=(action:string,text:string,cls='')=>`<button data-action="${action}" class="${cls}">${text}</button>`;
-function overlaySwitch(source:'hand'|'backrow'){
- const enabled=(source==='hand'?state.config.handOverlayEnabled:state.config.backrowOverlayEnabled)??state.config.overlayEnabled;
- const name=source==='hand'?'公开手牌':'盖放魔陷';
- return `<button class="overlay-switch" data-action="toggleOverlay" data-overlay="${source}" role="switch" aria-label="${name}悬浮窗" aria-checked="${enabled}" title="${enabled?'关闭':'开启'}${name}悬浮窗">悬浮窗</button>`;
-}
 function toast(message:string){const e=document.querySelector<HTMLElement>('#toast')!;e.textContent=message;e.hidden=false;setTimeout(()=>{e.hidden=true;},6000);}
 async function cmd(name:string,value?:unknown){const r=await api.command(name,value);if(!r.ok){toast(r.error??'操作失败');return false;}state=await api.getState();return true;}
-function navigate(next:string){page=next;if(next==='inventory')stockDraft=structuredClone({extra:state.inventory.extra,banished:state.inventory.banished});if(next==='editDeck')deckDraft=structuredClone(state.deck);render();content.scrollTop=0;}
+function navigate(next:string){if(!isSettings&&next!=='home')return;if(isSettings&&next==='home')next='settings';page=next;if(next==='inventory')stockDraft=structuredClone({extra:state.inventory.extra,banished:state.inventory.banished});if(next==='editDeck')deckDraft=structuredClone(state.deck);render();content.scrollTop=0;}
 function cardName(id:number){return state.catalog[id]?.name??`卡片 ${id}`;}
 function cardLabel(id:number){const category=state.catalog[id]?.category;const label=category==='monster'?'怪兽':category==='spell'?'魔法':category==='trap'?'陷阱':'类别待确认';return `<span class="card-name">${esc(cardName(id))}</span><small class="card-category ${category??'unknown'}">${label}</small>`;}
 const detailDialog=document.querySelector<HTMLDialogElement>('#card-detail')!;
@@ -55,32 +52,8 @@ async function showCardDetail(id:number){
 }
 detailDialog.addEventListener('click',e=>{const el=e.target as HTMLElement;if(el.closest('[data-detail-close]'))detailDialog.close();if(el.closest('[data-detail-retry]'))void showCardDetail(selectedCard);const card=el.closest<HTMLElement>('[data-card-detail]');if(card)void showCardDetail(Number(card.dataset.cardDetail));});
 detailDialog.addEventListener('close',()=>{detailRequest++;});
-function home(){
- const c=state.counts;const targets=targetKinds(state.monsters);
- const plans=state.result.plans.map((p,i)=>`<section class="panel plan"><h3>方案 ${i+1}</h3><p class="caption">除外自己的</p><div class="formula"><div class="number-card">2 × <strong>${p.rank}</strong><small>阶 超量</small></div><span class="plus">+</span><div class="number-card fusion"><strong>${p.level}</strong><small>星 融合</small></div></div><p class="caption">选择对手场上的</p><div class="number-card target"><strong>${p.target}</strong><small>${unit(p.targetKind)} 怪兽</small></div>${p.usesPrevious?`<details><summary>需要使用原已除外卡</summary>返回 ${p.returnRank}阶超量 ＋ ${p.returnLevel}星融合</details>`:''}</section>`).join('');
- const chips=(kind:'xyz'|'fusion')=>[...groupStock(state.inventory.banished,state.catalog,kind)].sort((a,b)=>a[0]-b[0]).map(([v,n])=>`<span class="chip ${kind==='fusion'?'fusion':''}">${v}${kind==='xyz'?'阶':'星'} ×${n}</span>`).join('')||'<span class="muted">暂无已确认卡片</span>';
- return `${state.notice?`<div class="notice">${button('dismissNotice','×','small')}${esc(state.notice)}</div>`:''}
- <section class="panel scene-summary"><div class="panel-title"><h2>双方手牌与场上合计</h2>${button('counts','修正','small')}</div><div class="count-content"><div class="total" id="total">${val(state.total)}</div><table class="counts"><thead><tr><th></th><th>我方</th><th>对方</th></tr></thead><tbody><tr><th>手牌</th><td>${val(c.myHand)}</td><td>${val(c.opponentHand)}</td></tr><tr><th>场上</th><td>${val(c.myField)}</td><td>${val(c.opponentField)}</td></tr></tbody></table></div>${state.manual?'<span class="badge">含手动核对值</span>':''}
- <div class="summary-targets"><div class="panel-title"><h2>对方星数 / 阶级</h2>${button('monsters','修正','small')}</div><div class="tiles">${targets.map(t=>`<div class="tile ${t.kind}" aria-label="${t.value}${unit(t.kind)}"><b>${t.value}</b><small>${unit(t.kind)}</small></div>`).join('')||'<span class="muted">暂无可匹配数值</span>'}</div></div></section>
- <section class="panel" id="public-hand"><div class="panel-title"><h2>对方已公开手牌</h2><div class="panel-tools">${overlaySwitch('hand')}<span class="badge">已确认 ${state.publicHand.cards.reduce((n,c)=>n+c.count,0)} 张</span></div></div>${state.publicHand.cards.map(c=>`<button data-card-detail="${c.id}" class="list-row public-hand-card"><span>${cardLabel(c.id)}</span><b>×${c.count}</b></button>`).join('')}${state.publicHand.uncertainCards.length?`<div class="public-hand-pending"><p class="warning">剩余手牌候选</p>${state.publicHand.uncertainCards.map(c=>`<button data-card-detail="${c.id}" class="list-row public-hand-card uncertain"><span>${cardLabel(c.id)}</span><b>最多 ×${c.count}</b></button>`).join('')}</div>`:''}<p class="muted">${esc(state.publicHand.reason)}</p></section>
- ${backrowPanel()}
- <div id="plans">${plans||`<section class="panel empty"><span class="symbol">${state.result.status==='none'?'≠':'!'}</span><strong>${state.result.status==='none'?'当前无匹配组合':'等待核对 / 更新'}</strong><p class="muted">${esc(state.result.reason)}</p>${state.result.status==='uncertain'?button(state.deckReady?'inventory':'deck','核对数据','small'):''}</section>`}</div>
- <section class="panel"><div class="panel-title"><h2>已在除外区</h2>${button('inventory','核对','small')}</div><div class="stock-row"><span>超量</span><div class="chips">${chips('xyz')}</div></div><div class="stock-row"><span>融合</span><div class="chips">${chips('fusion')}</div></div>${state.inventory.quality==='unknown'?'<small class="warning">部分库存待核对，不作为确定材料</small>':''}</section>`;
-}
-const back=()=>button('home','← 返回计算','back');
-function backrowPanel(){
- const b=state.backrow;
- const name=(id:number)=>`<button class="small" data-card-detail="${id}">${cardLabel(id)}</button>`;
- const cell=(slot:number)=>{
-  const c=b.cards.find(c=>c.slot===slot),known=c?.confirmedId&&!b.uncertain&&!c.positionChanged;
-  const category=known?state.catalog[c.confirmedId!]?.category:undefined;
-  const label=!c?(b.publicSlots.includes(slot)?'公开':b.count===null?'—':'空'):c.positionChanged?'变动':known?(category?{spell:'魔',trap:'陷',monster:'怪'}[category]:'卡'):'未知';
-  return `<button class="backrow-cell ${c?'set-card':'empty-slot'} ${category??''}" data-set-slot="${slot}" ${!c?'disabled':''} aria-label="${slotName(slot)}：${label}"><small>${slot===12?'场地':12-slot}</small><b>${label}</b></button>`;
- };
- const pending=b.cards.filter(c=>!c.confirmedId||b.uncertain||c.positionChanged);
- const ids=[...new Set(pending.flatMap(c=>c.candidates))];
- return `<section class="panel" id="opponent-backrow"><div class="panel-title"><h2>对方盖放魔陷</h2><div class="panel-tools">${overlaySwitch('backrow')}<span class="badge">${b.count===null?'数量待确认':`${b.count} 张`}</span></div></div><div class="backrow-grid">${[11,10,9,8,7].map(cell).join('')}</div>${pending.length?`<div class="backrow-candidates"><small class="muted">${pending.map(c=>c.slot===12?'场地':12-c.slot).join('、')} 区可能是</small><div class="actions">${ids.map(name).join('')||'<span class="muted">暂无已知候选</span>'}</div></div>`:''}</section>`;
-}
+function home(){return `<div id="sidebar-modules">${renderSidebar(state,state.config.sidebarModules??defaultSidebarModules)}</div>`; }
+const back=()=>`<nav class="settings-nav" aria-label="设置分类">${[['settings','显示与设置'],['counts','数量修正'],['monsters','怪兽数值'],['inventory','库存核对'],['deck','牌组核对']].map(([id,label])=>`<button data-action="${id}" aria-current="${page===id?'page':'false'}">${label}</button>`).join('')}</nav>`;
 function deckPage(){
  const d=state.deck;
  const part=(title:string,items:Record<string,number>)=>`<details ${title==='额外牌组'?'open':''}><summary>${title} · ${Object.values(items).reduce((a,b)=>a+b,0)}张</summary>${Object.entries(items).map(([id,n])=>`<div class="list-row"><span>${esc(cardName(+id))}${!state.catalog[+id]?'<small class="warning"> 属性未获取</small>':''}</span><b>×${n}</b></div>`).join('')}</details>`;
@@ -94,33 +67,68 @@ function inventoryPage(){
  const options=Object.keys({...state.deck?.main,...state.deck?.extra,...Object.fromEntries(state.inventory.banished.map(s=>[s.id,1]))}).map(id=>`<option value="${id}">${esc(cardName(+id))} (#${id})</option>`).join('');
  return `${back()}<h2>库存核对</h2><p>当前区域总数：额外 <b>${val(state.snapshot?.extraCount??null)}</b> · 除外 <b>${val(state.snapshot?.banishedCount??null)}</b></p><p class="warning">${esc(state.inventory.reasons.join('；'))}</p><p class="muted">只修改能从游戏中确认的数据。“已确认”表示可识别；除外卡须确认表侧。数量设为0可移除。</p>${(['extra','banished'] as const).map(z=>`<details open><summary>${z==='extra'?'额外牌组':'除外区'}</summary>${stockDraft![z].map((s,i)=>row(s,i,z)).join('')||'<p class="muted">暂无条目</p>'}</details>`).join('')}<hr class="divider"><form id="add-stock"><div class="form-row"><label for="add-card">添加卡片</label><select id="add-card" name="id">${options}</select></div><select name="zone" aria-label="添加区域"><option value="banished">除外区</option><option value="extra">额外牌组</option></select><div class="actions"><button>添加一张</button></div></form><div class="actions">${button('saveInventory','确认库存','primary')}${button('restore','恢复自动读取')}</div>`;
 }
-function settingsPage(){const c=state.config;return `${back()}<h2>设置与诊断</h2><div class="actions">${button(state.paused?'resume':'pause',state.paused?'恢复读取':'暂停读取')}${button('reconnect','重新连接')}${button('restore','恢复自动读取')}</div><hr class="divider"><form id="config-form"><div class="form-row"><label for="readerBackend">读取后端</label><select id="readerBackend" name="readerBackend"><option value="companion" ${c.readerBackend!=='owned'?'selected':''}>兼容后端（Untapped模块）</option><option value="owned" ${c.readerBackend==='owned'?'selected':''}>自有只读后端</option></select></div><p class="muted">自有后端仅支持已验证的游戏版本，无需 Untapped；首次识别会较慢。牌组卡表缺失时需加载或核对。</p><div class="form-row"><label for="handOverlayEnabled">公开手牌悬浮窗</label><select id="handOverlayEnabled" name="handOverlayEnabled"><option value="true" ${c.handOverlayEnabled?'selected':''}>开启</option><option value="false" ${!c.handOverlayEnabled?'selected':''}>关闭（侧栏仍显示）</option></select></div><div class="form-row"><label for="backrowOverlayEnabled">盖放魔陷悬浮窗</label><select id="backrowOverlayEnabled" name="backrowOverlayEnabled"><option value="true" ${c.backrowOverlayEnabled?'selected':''}>开启</option><option value="false" ${!c.backrowOverlayEnabled?'selected':''}>关闭（侧栏仍显示）</option></select></div><details><summary>浮窗位置微调</summary><p class="muted">按游戏画面百分比调整。提示应位于盖牌内部下沿；更换分辨率后如有偏移可微调。</p>${[['overlayOffsetX','水平偏移',c.overlayOffsetX],['overlayOffsetY','垂直偏移',c.overlayOffsetY]].map(([key,label,value])=>`<div class="form-row"><label for="${key}">${label}（%）</label><input id="${key}" name="${key}" type="number" min="-10" max="10" step="0.1" value="${value}"></div>`).join('')}</details><div class="form-row"><label for="theme">主题</label><select id="theme" name="theme"><option value="dark" ${c.theme!=='light'?'selected':''}>深色</option><option value="light" ${c.theme==='light'?'selected':''}>浅色</option></select></div>${[['modulePath','本机读取模块路径',c.modulePath,'text'],['unityVersion','Unity版本',c.unityVersion,'text'],['interval','更新间隔（毫秒）',c.interval,'number'],['width','窗口宽度',c.width,'number'],['height','窗口高度',c.height,'number']].map(([key,label,value,type])=>`<div class="form-row"><label for="${key}">${label}</label><input id="${key}" name="${key}" type="${type}" value="${esc(value)}" ${key==='modulePath'?'':'required'}></div>`).join('')}<button class="primary">保存设置</button></form><div class="actions">${button('deck','牌组核对')}${button('catalog','更新卡片属性')}${button('export','保存本地诊断')}</div><p class="muted">${esc(state.catalogMessage)}</p><details><summary>诊断详情</summary><pre>${esc(JSON.stringify({状态:state.snapshot?.status,读取时间:state.snapshot?.timestamp?new Date(state.snapshot.timestamp).toLocaleTimeString():'无',日志数量:state.snapshot?.logLength,库存状态:state.inventory.quality,原因:state.result.reason},null,2))}</pre></details><p class="muted">个人使用原型 0.3.0 · 仅本地处理<br>读取后端可在上方切换；不自动操作游戏。</p>`;}
+function displaySettings(){
+ const c=state.config;
+ const toggle=(target:string,label:string,checked:boolean,id?:ModuleId)=>`<input type="checkbox" role="switch" data-display="${target}" ${id?`data-module="${id}"`:''} aria-label="${label}" ${checked?'checked':''}>`;
+ return `<section class="panel display-settings"><div class="panel-title"><h3>模块显示</h3><span class="muted">即时保存</span></div>
+ <p class="muted">侧边栏按开启顺序排列，关闭后重开排到末尾。右列控制场上浮窗，没有场上浮窗的模块留空。</p>
+ <table class="module-settings"><thead><tr><th>模块名称</th><th>显示在侧边栏</th><th>显示悬浮窗</th></tr></thead><tbody>${modules.map(m=>`<tr><th scope="row">${m.label}</th><td>${toggle('sidebar',m.label+'：显示在侧边栏',(c.sidebarModules??defaultSidebarModules).includes(m.id),m.id)}<small data-order="sidebar" data-module="${m.id}"></small></td><td>${m.id==='hand'?toggle('handOverlayEnabled','公开手牌悬浮窗',c.handOverlayEnabled??c.overlayEnabled):m.id==='backrow'?toggle('backrowOverlayEnabled','盖放魔陷悬浮窗',c.backrowOverlayEnabled??c.overlayEnabled):''}</td></tr>`).join('')}</tbody></table>
+ <div class="form-row"><label for="hand-overlay-style">场上手牌悬浮窗样式</label><select id="hand-overlay-style"><option value="label" ${c.handOverlayStyle==='label'?'selected':''}>怪／魔／陷</option><option value="thumbnail" ${c.handOverlayStyle!=='label'?'selected':''}>卡图缩略图</option></select></div>
+ <label class="display-option"><span>信息悬浮窗<small>控制整个入口和面板；关闭后保留模块选择与顺序。</small></span>${toggle('infoOverlayEnabled','信息悬浮窗总开关',c.infoOverlayEnabled!==false)}</label>
+ <p class="muted">信息悬浮窗的模块内容请在其入口菜单中选择，与上述场上浮窗开关独立。</p></section>`;
+}
+function syncDisplayControls(){
+ const c=state.config;
+ const style=content.querySelector<HTMLSelectElement>('#hand-overlay-style');if(style)style.value=c.handOverlayStyle??'thumbnail';
+ for(const input of content.querySelectorAll<HTMLInputElement>('[data-display]')){
+  const target=input.dataset.display!,id=input.dataset.module as ModuleId;
+  input.checked=target==='sidebar'?(c.sidebarModules??defaultSidebarModules).includes(id):target==='info'?(c.selectedModules??[]).includes(id):target==='infoOverlayEnabled'?c.infoOverlayEnabled!==false:target==='handOverlayEnabled'?(c.handOverlayEnabled??c.overlayEnabled):(c.backrowOverlayEnabled??c.overlayEnabled);
+ }
+ for(const label of content.querySelectorAll<HTMLElement>('[data-order]')){
+  const order=label.dataset.order==='sidebar'?(c.sidebarModules??defaultSidebarModules):(c.selectedModules??[]),index=order.indexOf(label.dataset.module as ModuleId);
+  label.textContent=index<0?'':`第 ${index+1} 位`;
+ }
+}
+function settingsPage(){const c=state.config;return `${back()}<h2>设置</h2><div class="actions">${button('showSidebar','显示信息侧栏')}${button('hideSidebar','隐藏信息侧栏')}</div>${displaySettings()}<h2>读取与外观</h2><div class="actions">${button(state.paused?'resume':'pause',state.paused?'恢复读取':'暂停读取')}${button('reconnect','重新连接')}${button('restore','恢复自动读取')}</div><hr class="divider"><form id="config-form"><div class="form-row"><label for="launchUntapped">打开 MD助手时一同启动 Untapped.gg</label><select id="launchUntapped" name="launchUntapped"><option value="false" ${!c.launchUntapped?'selected':''}>关闭（默认）</option><option value="true" ${c.launchUntapped?'selected':''}>开启</option></select></div><div class="form-row"><label for="readerBackend">读取后端</label><select id="readerBackend" name="readerBackend"><option value="companion" ${c.readerBackend!=='owned'?'selected':''}>兼容后端（Untapped模块）</option><option value="owned" ${c.readerBackend==='owned'?'selected':''}>自有只读后端</option></select></div><p class="muted">自有后端仅支持已验证的游戏版本，无需 Untapped；首次识别会较慢。牌组卡表缺失时需加载或核对。</p><details><summary>浮窗位置微调</summary><p class="muted">按游戏画面百分比调整。提示应位于盖牌内部下沿；更换分辨率后如有偏移可微调。</p>${[['overlayOffsetX','水平偏移',c.overlayOffsetX],['overlayOffsetY','垂直偏移',c.overlayOffsetY]].map(([key,label,value])=>`<div class="form-row"><label for="${key}">${label}（%）</label><input id="${key}" name="${key}" type="number" min="-10" max="10" step="0.1" value="${value}"></div>`).join('')}</details><div class="form-row"><label for="theme">主题</label><select id="theme" name="theme"><option value="dark" ${c.theme!=='light'?'selected':''}>深色</option><option value="light" ${c.theme==='light'?'selected':''}>浅色</option></select></div>${[['modulePath','本机读取模块路径',c.modulePath,'text'],['unityVersion','Unity版本',c.unityVersion,'text'],['interval','更新间隔（毫秒）',c.interval,'number'],['width','窗口宽度',c.width,'number'],['height','侧栏最大高度',c.height,'number']].map(([key,label,value,type])=>`<div class="form-row"><label for="${key}">${label}</label><input id="${key}" name="${key}" type="${type}" value="${esc(value)}" ${key==='modulePath'?'':'required'}></div>`).join('')}<button class="primary">保存设置</button></form><div class="actions">${button('deck','牌组核对')}${button('catalog','更新卡片属性')}${button('export','保存本地诊断')}</div><p class="muted">${esc(state.catalogMessage)}</p><details><summary>诊断详情</summary><pre>${esc(JSON.stringify({状态:state.snapshot?.status,读取时间:state.snapshot?.timestamp?new Date(state.snapshot.timestamp).toLocaleTimeString():'无',日志数量:state.snapshot?.logLength,库存状态:state.inventory.quality,原因:state.result.reason},null,2))}</pre></details><p class="muted">个人使用原型 0.3.0 · 仅本地处理<br>读取后端可在上方切换；不自动操作游戏。</p>`;}
+let measuredLayout='';
+function measureSidebar(){
+ if(isSettings||!state)return;
+ // Hidden windows can suspend animation frames; measure synchronously before showing.
+ {
+  const modulesNode=content.querySelector<HTMLElement>('#sidebar-modules');if(!modulesNode)return;
+  const style=getComputedStyle(content);
+  const height=modulesNode.getBoundingClientRect().height+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)+document.querySelector('header')!.getBoundingClientRect().height+document.querySelector('footer')!.getBoundingClientRect().height;
+  const value={height:Math.ceil(height),signature:JSON.stringify(state.config.sidebarModules??defaultSidebarModules)},key=JSON.stringify(value);
+  if(key!==measuredLayout){measuredLayout=key;void api.sidebarLayout(value);}
+ }
+}
+const sidebarObserver=new ResizeObserver(measureSidebar);
 let lastMarkup='' ;
-function render(){if(!state)return;const y=content.scrollTop;const markup=page==='home'?home():page==='deck'?deckPage():page==='editDeck'?editDeckPage():page==='counts'?countsPage():page==='monsters'?monstersPage():page==='inventory'?inventoryPage():settingsPage();if(markup!==lastMarkup){content.innerHTML=markup;lastMarkup=markup;content.scrollTop=y;}footer();}
+function render(){if(!state)return;const y=content.scrollTop;const markup=page==='home'?home():page==='deck'?deckPage():page==='editDeck'?editDeckPage():page==='counts'?countsPage():page==='monsters'?monstersPage():page==='inventory'?inventoryPage():settingsPage();if(markup!==lastMarkup){content.innerHTML=markup;lastMarkup=markup;content.scrollTop=y;if(!isSettings){sidebarObserver.disconnect();const modulesNode=content.querySelector('#sidebar-modules');if(modulesNode)sidebarObserver.observe(modulesNode);}}footer();syncDisplayControls();measureSidebar();}
 function footer(){document.documentElement.dataset.theme=state.config.theme??'dark';const status=state.deckReady?'卡组获取成功':state.deck?!state.deckAttributesReady?'卡组已读取 · 属性待获取':'卡组需要核对':state.snapshot?.deckSelection?'已识别牌组 · 卡表待获取':'尚未获取卡组';const badge=document.querySelector<HTMLButtonElement>('#deck-status')!;badge.textContent=state.deckReady?'✓':'!';badge.classList.toggle('warn',!state.deckReady);badge.setAttribute('aria-label',status);document.querySelector('#deck-status-tip')!.textContent=status;const s=state.snapshot;document.querySelector('#connection')!.innerHTML=`<span class="dot ${state.stale?'warn':''}">●</span>${state.paused?'已暂停':state.stale?'数据待更新':s?.status==='duel'?'已连接 · 自动更新':s?.status==='menu'?'已连接 · 等待对局':'等待 MD 启动'}`;}
-document.querySelector('#deck-status')!.addEventListener('click',()=>navigate('deck'));
+
 document.querySelector('#minimize')!.addEventListener('click',()=>void cmd('minimize'));
 document.querySelector('#close')!.addEventListener('click',()=>void cmd('close'));
-document.querySelector('#settings')!.addEventListener('click',()=>navigate('settings'));
+document.querySelector('#settings')?.remove();
 content.addEventListener('click',async e=>{
  const slot=(e.target as HTMLElement).closest<HTMLElement>('[data-set-slot]');
  if(slot){const position=Number(slot.dataset.setSlot),c=state.backrow.cards.find(c=>c.slot===position);if(c?.confirmedId&&!state.backrow.uncertain&&!c.positionChanged)void showCardDetail(c.confirmedId);else showSetLocation(position);return;}
  const card=(e.target as HTMLElement).closest<HTMLElement>('[data-card-detail]');
  if(card){void showCardDetail(Number(card.dataset.cardDetail));return;}
  const action=(e.target as HTMLElement).closest<HTMLElement>('[data-action]')?.dataset.action;if(!action)return;
- if(action==='toggleOverlay'){
-  const source=(e.target as HTMLElement).closest<HTMLElement>('[data-overlay]')?.dataset.overlay;
-  if(source!=='hand'&&source!=='backrow')return;
-  const enabled=(source==='hand'?state.config.handOverlayEnabled:state.config.backrowOverlayEnabled)??state.config.overlayEnabled;
-  if(await cmd('overlay',{source,enabled:!enabled}))render();return;
- }
  if(['home','deck','editDeck','counts','monsters','inventory','settings'].includes(action)){navigate(action);return;}
  if(action==='saveDeck'&&deckDraft){const d=structuredClone(deckDraft);for(const z of ['main','extra'] as const)d[z]=Object.fromEntries(Object.entries(d[z]).filter(([,n])=>n>0));if(await cmd('deck',d))navigate('deck');return;}
  if(action==='saveInventory'){if(await cmd('inventory',stockDraft))navigate('home');return;}
  if(await cmd(action)){if(['confirmDeck','restore'].includes(action))navigate('home');else render();}
 });
-content.addEventListener('change',e=>{
+content.addEventListener('change',async e=>{
  const el=e.target as HTMLInputElement;
+ if(el.id==='hand-overlay-style'){el.disabled=true;await cmd('handOverlayStyle',el.value);syncDisplayControls();el.disabled=false;return;}
+ if(el.dataset.display){
+  el.disabled=true;
+  await cmd('display',{target:el.dataset.display,id:el.dataset.module,enabled:el.checked});
+  syncDisplayControls();el.disabled=false;return;
+ }
  if(el.dataset.deckZone&&deckDraft){deckDraft[el.dataset.deckZone as 'main'|'extra'][el.dataset.cardId!]=Number(el.value);return;}
  const row=el.closest<HTMLElement>('[data-zone]');if(!row||!stockDraft)return;
  const z=row.dataset.zone as 'extra'|'banished',i=Number(row.dataset.index);
@@ -133,12 +141,19 @@ content.addEventListener('submit',async e=>{
    const monsters:Monster[]=[];for(const [key,kind] of [['levels','level'],['ranks','rank']] as const){for(const value of String(data[key]).split(/[,，\s]+/).filter(Boolean))monsters.push({uid:monsters.length,kind,value:Number(value),faceUp:true});}
    if(await cmd('monsters',monsters))navigate('home');
  }
- if(form.id==='config-form'){if(await cmd('config',{...data,overlayEnabled:data.handOverlayEnabled==='true'||data.backrowOverlayEnabled==='true',handOverlayEnabled:data.handOverlayEnabled==='true',backrowOverlayEnabled:data.backrowOverlayEnabled==='true',overlayOffsetX:Number(data.overlayOffsetX),overlayOffsetY:Number(data.overlayOffsetY),interval:Number(data.interval),width:Number(data.width),height:Number(data.height)}))render();}
+ if(form.id==='config-form'){if(await cmd('config',{...state.config,...data,launchUntapped:data.launchUntapped==='true',overlayOffsetX:Number(data.overlayOffsetX),overlayOffsetY:Number(data.overlayOffsetY),interval:Number(data.interval),width:Number(data.width),height:Number(data.height)}))render();}
  if(form.id==='add-stock'){
    const zone=String(data.zone) as 'extra'|'banished',id=Number(data.id);if(!id)return;
    const found=stockDraft![zone].find(s=>s.id===id&&s.face==='up');if(found)found.count++;else stockDraft![zone].push({id,count:1,face:'up'});render();
  }
  if(form.id==='add-deck'&&deckDraft){const id=Number(data.id),zone=String(data.zone) as 'main'|'extra';if(!state.catalog[id]){toast('卡片编号不在当前数据库中');return;}deckDraft[zone][id]=(deckDraft[zone][id]??0)+1;render();}
 });
-api.subscribe(s=>{state=s;if(page==='home')render();else footer();refreshLocation();});
-state=await api.getState();render();
+api.subscribe(s=>{state=s;if(page==='home')render();else{footer();syncDisplayControls();}refreshLocation();});
+if(isSettings){
+ document.body.classList.add('settings-window');document.title='MD助手 · 设置';document.querySelector('h1')!.textContent='MD助手 · 设置';
+ document.querySelector('#close')!.setAttribute('aria-label','隐藏主界面，保留后台运行');document.querySelector('#close')!.setAttribute('title','隐藏主界面，保留后台运行；从托盘退出');
+ document.querySelector('#minimize')!.setAttribute('aria-label','最小化设置窗口');document.querySelector('#minimize')!.setAttribute('title','最小化设置窗口');
+ api.onSettingsPage(next=>{if(next!==page&&['settings','deck','counts','monsters','inventory'].includes(next))navigate(next);});
+}
+state=await api.getState();
+if(isSettings){const initial=params.get('page')??'settings';navigate(['settings','deck','counts','monsters','inventory'].includes(initial)?initial:'settings');}else render();

@@ -1,7 +1,7 @@
 import type {CardDetail} from '../data/card-detail.js';
 import type {SetCard} from '../domain/model.js';
-type Payload={kind:'tag'|'detail';source?:'hand';name?:string;theme:string;width?:number;height?:number;slot?:number;label?:string;category?:string;card?:SetCard;uncertain?:boolean;candidates?:{id:number;name:string;category?:string;rarity?:string}[]};
-declare global {interface Window {overlay:{getState:()=>Promise<Payload|null>;select:(slot:number)=>Promise<void>;close:()=>Promise<void>;cardDetail:(id:number)=>Promise<{ok:boolean;detail?:CardDetail;error?:string}>;subscribe:(callback:(state:Payload)=>void)=>()=>void}}}
+type Payload={kind:'tag'|'detail';source?:'hand';style?:'label'|'thumbnail';possible?:boolean;name?:string;password?:number;theme:string;width?:number;height?:number;slot?:number;label?:string;category?:string;card?:SetCard;uncertain?:boolean;candidates?:{id:number;name:string;category?:string;rarity?:string}[]};
+declare global {interface Window {overlay:{getState:()=>Promise<Payload|null>;select:(slot:number,preview?:boolean)=>Promise<void>;close:()=>Promise<void>;cardDetail:(id:number)=>Promise<{ok:boolean;detail?:CardDetail;error?:string}>;subscribe:(callback:(state:Payload)=>void)=>()=>void}}}
 const api=window.overlay,root=document.querySelector<HTMLElement>('#overlay')!;
 let data:Payload|null=null,signature='',request=0,selected=0;
 function node<K extends keyof HTMLElementTagNameMap>(tag:K,text='',className=''){const el=document.createElement(tag);el.textContent=text;el.className=className;return el;}
@@ -38,7 +38,25 @@ async function detail(id:number){
 function render(next:Payload|null){
  data=next;const key=JSON.stringify(next);if(key===signature)return;signature=key;request++;
  root.replaceChildren();if(!next)return;document.documentElement.dataset.theme=next.theme;
- if(next.kind==='tag'){const button=node('button',next.label,`tag ${next.category??''} ${next.source==='hand'?'hand-tag':''}`);button.style.width=`${next.width}px`;button.style.height=`${next.height}px`;button.setAttribute('aria-label',`查看${next.source==='hand'?'公开手牌':'盖牌'}：${next.name??next.label}`);button.onclick=()=>void api.select(next.slot!);root.append(button);return;}
+ if(next.kind==='tag'){
+  const hand=next.source==='hand',button=node('button',next.label,`tag ${next.category??''} ${hand?'hand-tag':''}`);
+  button.style.width=`${next.width}px`;button.style.height=`${next.height}px`;
+  button.setAttribute('aria-label',`查看${hand?'公开手牌':next.possible?'盖牌候选':'盖牌'}：${next.name??next.label}`);
+  button.onclick=()=>void api.select(next.slot!,hand);
+  button.title=(next.possible?'可能是（依据公开信息，并未确认）：':'')+(next.name??next.label??'');
+  if(next.style==='thumbnail'){
+   button.classList.add('thumbnail-tag');
+   const fallback=node('span',next.name??next.label??'卡图暂不可用','hand-fallback');
+   button.replaceChildren(fallback);
+   if(Number.isInteger(next.password)&&next.password!>0&&next.password!<1000000000){
+    const img=node('img');img.className='hand-thumbnail';img.alt=next.name??'卡图';img.referrerPolicy='no-referrer';
+    img.onload=()=>{fallback.hidden=true;};img.onerror=()=>{img.remove();fallback.hidden=false;};
+    img.src=`https://cdn.233.momobako.com/ygopro/pics/${next.password}.jpg!half`;button.append(img);
+   }
+  }
+  if(next.possible){button.classList.add('possible-card');button.append(node('span','可能','candidate-caption'));}
+  root.append(button);return;
+ }
  const panel=node('section','','detail');
  const area=node('div');area.id='detail-content';panel.append(area);
  const certain=!!next.card?.confirmedId&&!next.uncertain&&!next.card.positionChanged;

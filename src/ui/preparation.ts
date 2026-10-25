@@ -1,0 +1,10 @@
+type PreparationPayload={kind:'preparation';width:number;height:number;ready:boolean;status:string;name:string;info:string};
+declare global {interface Window {preparationOverlay:{getState:()=>Promise<PreparationPayload|null>;layout:(regions:{x:number;y:number;width:number;height:number}[])=>Promise<void>;onHidden:(cb:()=>void)=>()=>void;subscribe:(cb:(data:PreparationPayload)=>void)=>()=>void}}}
+const api=window.preparationOverlay,shell=document.querySelector<HTMLElement>('#preparation')!,pill=document.querySelector<HTMLElement>('#status-pill')!,icon=document.querySelector<HTMLButtonElement>('#status-icon')!,detail=document.querySelector<HTMLElement>('#status-detail')!;
+let last='',timer:ReturnType<typeof setTimeout>|undefined;
+function measure(){const r=pill.getBoundingClientRect(),regions=[{x:r.x,y:r.y,width:r.width,height:r.height}],key=JSON.stringify(regions);if(key!==last){last=key;void api.layout(regions);}}
+function expand(open:boolean){clearTimeout(timer);detail.hidden=!open;icon.setAttribute('aria-expanded',String(open));requestAnimationFrame(measure);}
+function render(data:PreparationPayload|null){if(!data||data.kind!=='preparation')return;shell.style.zoom=String(data.width/202);shell.classList.toggle('ready',data.ready);icon.textContent=data.ready?'MD✓':'MD!';icon.setAttribute('aria-label','MD助手：'+data.status);document.querySelector('#status-text')!.textContent=data.status;document.querySelector('#deck-name')!.textContent=data.name;document.querySelector('#deck-info')!.textContent=data.info;requestAnimationFrame(measure);}
+icon.addEventListener('mouseenter',()=>expand(true));icon.addEventListener('focus',()=>expand(true));icon.addEventListener('click',()=>expand(detail.hidden===true));pill.addEventListener('mouseenter',()=>clearTimeout(timer));pill.addEventListener('mouseleave',()=>{timer=setTimeout(()=>expand(false),160);});document.addEventListener('keydown',e=>{if(e.key==='Escape')expand(false);});
+new ResizeObserver(measure).observe(pill);api.onHidden(()=>expand(false));api.subscribe(render);render(await api.getState());
+export {};

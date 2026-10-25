@@ -1,18 +1,56 @@
+import {spawn} from 'node:child_process';
+import {sidebarHeight} from '../domain/sidebar-layout.js';
+import {defaultSidebarModules} from '../domain/modules.js';
 import {CardOverlay} from './card-overlay.js';
-import {app,BrowserWindow,ipcMain,screen,Tray,Menu,nativeImage} from 'electron';
+import {app,BrowserWindow,dialog,ipcMain,screen,Tray,Menu,nativeImage} from 'electron';
 import path from 'node:path';import {fileURLToPath} from 'node:url';
 import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:fs';
 import {DuelStore} from '../domain/store.js';import {validateDeck,type Snapshot} from '../domain/model.js';
-import {downloadCatalog,needsChineseCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
+import {downloadCatalog,needsChineseCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,updateDisplayConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
 import {fetchCatalogResponse} from './catalog-fetch.js';
 import {downloadCardDetail,type CardDetail} from '../data/card-detail.js';
 import {resolveSelectedDeck} from '../domain/deck-cache.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const dataDir=dataDirectory(root,process.env.APPDATA??app.getPath('appData'),app.isPackaged,process.env.MD_TEST_MODE==='1');
 mkdirSync(dataDir,{recursive:true});app.setPath('userData',path.join(dataDir,'electron'));
+const singleInstance=app.requestSingleInstanceLock();if(!singleInstance)app.quit();
+app.on('second-instance',()=>{if(app.isReady())showMain();});
 let overlay:CardOverlay|undefined;
+let settingsWindow:BrowserWindow|undefined;
+async function showSettings(page='settings'){
+ if(settingsWindow&&!settingsWindow.isDestroyed()){
+  if(settingsWindow.isMinimized())settingsWindow.restore();
+  settingsWindow.show();settingsWindow.focus();settingsWindow.webContents.send('settings:page',page);return;
+ }
+ const area=screen.getPrimaryDisplay().workArea;
+ const window=new BrowserWindow({width:Math.min(760,area.width),height:Math.min(850,area.height),minWidth:480,minHeight:480,frame:false,title:'MD助手 · 设置',backgroundColor:'#1e2228',show:false,
+  webPreferences:{preload:fileURLToPath(new URL('./preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+ settingsWindow=window;window.setMenu(null);
+ window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',e=>e.preventDefault());
+ window.on('close',event=>{if(!quitting){event.preventDefault();window.hide();}});
+ window.on('minimize',()=>{if(!quitting)window.hide();});
+ window.on('closed',()=>{if(settingsWindow===window)settingsWindow=undefined;});
+ await window.loadFile(fileURLToPath(new URL('../ui/index.html',import.meta.url)),{query:{window:'settings',page}});
+ if(!window.isDestroyed()){window.show();window.focus();}
+}
+
 let tray:Tray|undefined;let quitting=false;
-function showMain(){if(!win||win.isDestroyed())return;if(win.isMinimized())win.restore();win.show();win.focus();}
+function showMain(){void showSettings();}
+let sidebarRequested=true,sidebarMeasured=0,sidebarSignature='';
+const sidebarKey=()=>JSON.stringify(config.sidebarModules??defaultSidebarModules);
+function syncSidebar(){
+ if(!win||win.isDestroyed())return;
+ const signature=sidebarKey();if(signature!==sidebarSignature){sidebarSignature=signature;sidebarMeasured=0;sidebarRequested=true;}
+ if(!(config.sidebarModules??defaultSidebarModules).length||!sidebarRequested){win.hide();return;}
+ if(!sidebarMeasured)return;
+ const bounds=win.getBounds(),area=screen.getDisplayMatching(bounds).workArea;
+ const height=sidebarHeight(sidebarMeasured,config.height,area.height);
+ const y=Math.max(area.y,Math.min(bounds.y,area.y+area.height-height));
+ if(bounds.height!==height||bounds.y!==y)win.setBounds({...bounds,y,height},false);
+ if(!win.isVisible())win.showInactive();
+}
+function hideSidebar(){sidebarRequested=false;win.hide();}
+function showSidebar(){if(!win||win.isDestroyed())return;if(!(config.sidebarModules??defaultSidebarModules).length){config=validateConfig({...config,sidebarModules:[...defaultSidebarModules]});save('config.json',config);publish();}sidebarRequested=true;if(win.isMinimized())win.restore();syncSidebar();if(win.isVisible())win.focus();}
 const store=new DuelStore();let win:BrowserWindow;let host:ReaderHost;let config=defaults();let notice='';let catalogMessage='';let downloading=false;
 const read=(name:string)=>{try{return JSON.parse(readFileSync(path.join(dataDir,name),'utf8'));}catch{return null;}};
 function save(name:string,value:unknown){const file=path.join(dataDir,name);writeFileSync(file+'.tmp',JSON.stringify(value,null,2));renameSync(file+'.tmp',file);}
@@ -22,7 +60,7 @@ function companionDecks(){
   try{return JSON.parse(readFileSync(path.join(process.env.APPDATA??app.getPath('appData'),'untapped-companion','ygom','decks.json'),'utf8'));}catch{return null;}
 }
 function payload(){return {...store.view(),notice,catalogMessage,config};}
-function publish(){if(win&&!win.isDestroyed())win.webContents.send('state',payload());overlay?.refresh();}
+function publish(){syncSidebar();if(win&&!win.isDestroyed())win.webContents.send('state',payload());if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.webContents.send('state',payload());overlay?.refresh();}
 function begin(){
   if(process.env.MD_TEST_MODE==='1')return;store.paused=false;store.error='';
   if(config.readerBackend==='owned'){
@@ -36,6 +74,14 @@ function begin(){
   }
   host.start({MD_READER_BACKEND:'companion',MD_SCRY_PATH:config.modulePath,MD_UNITY_VERSION:config.unityVersion,MD_INTERVAL:String(config.interval)});
 }
+function launchUntapped(){
+ const module=resolveModulePath(config.modulePath);
+ const base=module.replace(/[\\/]resources[\\/].*$/i,'');
+ const candidates=[path.join(process.env.LOCALAPPDATA??'','Programs','untapped-companion','Untapped.gg Companion.exe'),path.join(base,'Untapped.gg Companion.exe'),path.join(base,'Untapped Companion.exe')];
+ const executable=candidates.find(p=>existsSync(p));
+ if(!executable){notice='未找到 Untapped.gg，请检查安装位置后手动启动。';publish();return;}
+ const child=spawn(executable,[],{detached:true,stdio:'ignore',windowsHide:true});child.on('error',()=>{notice='Untapped.gg 启动失败，请手动启动。';publish();});child.unref();
+}
 async function updateCatalog(){
   if(downloading)return;downloading=true;catalogMessage='正在获取中文卡名与卡片属性';publish();
   try{
@@ -45,27 +91,31 @@ async function updateCatalog(){
   finally{downloading=false;publish();}
 }
 app.whenReady().then(async()=>{
+  if(!singleInstance)return;
   try{config=validateConfig({...config,...read('config.json')});}catch{notice='设置文件无效，已使用默认设置';}
   const cachedDeck=read('deck.json');if(cachedDeck&&validateDeck(cachedDeck))store.deck=cachedDeck;
   const cachedDecks=read('decks.json');if(cachedDecks&&typeof cachedDecks==='object'&&!Array.isArray(cachedDecks))knownDecks=cachedDecks;
   const cached=read('catalog.json');if(cached?.cards)store.catalog=cached.cards;
   const area=screen.getPrimaryDisplay().workArea;
-  win=new BrowserWindow({width:Math.min(config.width,area.width),height:Math.min(config.height,area.height),minWidth:300,minHeight:480,x:area.x+area.width-Math.min(config.width,area.width),y:area.y,frame:false,backgroundColor:'#1e2228',title:'MD助手',alwaysOnTop:false,
+  win=new BrowserWindow({width:Math.min(config.width,area.width),height:Math.min(config.height,area.height),minWidth:300,minHeight:100,x:area.x+area.width-Math.min(config.width,area.width),y:area.y,frame:false,backgroundColor:'#1e2228',title:'MD助手 · 信息侧栏',show:false,alwaysOnTop:false,
     webPreferences:{preload:fileURLToPath(new URL('./preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
-  overlay=new CardOverlay(()=>store.view(),()=>config);
+  overlay=new CardOverlay(()=>store.view(),()=>config,selectedModules=>{
+    config=validateConfig({...config,selectedModules});save('config.json',config);publish();
+  });
   const trayIcon=nativeImage.createFromPath(fileURLToPath(new URL('../ui/assets/md/icon-GUI_T_Icon1_Attr08.png',import.meta.url))).resize({width:32,height:32});
   tray=new Tray(trayIcon);tray.setToolTip('MD助手');
   const trayMenu=Menu.buildFromTemplate([
-    {id:'show',label:'显示 MD助手',click:showMain},
-    {id:'hide',label:'隐藏窗口',click:()=>win.hide()},
+    {id:'show',label:'打开 MD助手设置',click:showMain},
+    {id:'sidebar',label:'显示信息侧栏',click:showSidebar},
+    {id:'hide',label:'隐藏信息侧栏',click:hideSidebar},
     {type:'separator'},
     {id:'quit',label:'退出 MD助手',click:()=>app.quit()}
   ]);
   tray.setContextMenu(trayMenu);tray.on('click',showMain);tray.on('double-click',showMain);
-  win.on('close',event=>{if(!quitting){event.preventDefault();win.hide();}});
-  win.on('minimize',()=>{if(!quitting)win.hide();});
+  win.on('close',event=>{if(!quitting){event.preventDefault();hideSidebar();}});
+  win.on('minimize',()=>{if(!quitting)hideSidebar();});
   if(process.env.MD_TEST_MODE==='1')ipcMain.handle('test:tray',(_event,id:string)=>{
     const item=trayMenu.getMenuItemById(id);if(!item)throw Error('Unknown tray action');item.click(undefined as any,undefined as any,{} as any);return true;
   });
@@ -97,6 +147,11 @@ app.whenReady().then(async()=>{
     }
     publish();
   },reason=>{store.error=reason;publish();});
+  ipcMain.handle('sidebar:layout',(event,value:{height:number;signature:string})=>{
+   if(event.sender!==win.webContents||!value||!Number.isFinite(value.height)||value.height<=0||value.height>100000||value.signature!==sidebarKey())return;
+   if(sidebarSignature!==value.signature){sidebarSignature=value.signature;sidebarRequested=true;}
+   sidebarMeasured=value.height;syncSidebar();
+  });
   ipcMain.handle('state',()=>payload());
   const detailCache:Record<number,CardDetail>=read('card-details.json')??{};
   const pendingDetails=new Map<number,Promise<CardDetail>>();
@@ -120,11 +175,16 @@ app.whenReady().then(async()=>{
     }catch(e){return {ok:false,error:e instanceof Error?e.message:String(e)};}
   });
   ipcMain.handle('command',async(event,command:string,value:any)=>{
-    if(event.sender!==win.webContents)throw Error('无效来源');
+    if(event.sender!==win.webContents&&event.sender!==settingsWindow?.webContents)throw Error('无效来源');
     try{
       switch(command){
-        case 'minimize':win.minimize();break;
-        case 'close':win.close();break;
+        case 'settings':await showSettings(['settings','deck','counts','monsters','inventory'].includes(value)?value:'settings');break;
+        case 'showSidebar':showSidebar();break;
+        case 'hideSidebar':hideSidebar();break;
+        case 'minimize':BrowserWindow.fromWebContents(event.sender)?.minimize();break;
+        case 'close':BrowserWindow.fromWebContents(event.sender)?.close();break;
+        case 'display':config=updateDisplayConfig(config,value);save('config.json',config);break;
+        case 'handOverlayStyle':if(value!=='label'&&value!=='thumbnail')throw Error('手牌浮窗样式无效');config=validateConfig({...config,handOverlayStyle:value});save('config.json',config);break;
         case 'confirmDeck':store.confirmDeck();break;
         case 'deck':store.setDeck(value);save('deck.json',store.deck);break;
         case 'counts':store.setCounts(value);break;
@@ -134,7 +194,15 @@ app.whenReady().then(async()=>{
         case 'pause':host.stop();store.paused=true;break;
         case 'resume':case 'reconnect':begin();break;
         case 'catalog':await updateCatalog();break;
-        case 'config':config=validateConfig(value);save('config.json',config);win.setSize(config.width,config.height);begin();break;
+        case 'config':{
+          let next=validateConfig(value);
+          if(next.readerBackend==='companion'&&config.readerBackend!=='companion'){
+           const answer=await dialog.showMessageBox(settingsWindow??win,{type:'question',title:'联动启动 Untapped.gg',message:'以后打开 MD助手时，是否一同启动 Untapped.gg？',buttons:['一同启动','不启动'],defaultId:1,cancelId:1,noLink:true});
+           next=validateConfig({...next,launchUntapped:answer.response===0});
+          }
+          const restart=next.readerBackend!==config.readerBackend||next.modulePath!==config.modulePath||next.unityVersion!==config.unityVersion||next.interval!==config.interval;
+          config=next;save('config.json',config);win.setSize(config.width,win.getBounds().height);if(restart)begin();break;
+        }
         case 'overlay':
           if(typeof value==='boolean')config=validateConfig({...config,overlayEnabled:value,handOverlayEnabled:value,backrowOverlayEnabled:value});
           else if(value&&['hand','backrow'].includes(value.source)&&typeof value.enabled==='boolean')config=validateConfig({...config,[value.source==='hand'?'handOverlayEnabled':'backrowOverlayEnabled']:value.enabled});
@@ -156,6 +224,8 @@ app.whenReady().then(async()=>{
     publish();return payload();
   });
   await win.loadFile(fileURLToPath(new URL('../ui/index.html',import.meta.url)));
+  syncSidebar();await showSettings();
+  if(config.launchUntapped)launchUntapped();
   begin();setInterval(publish,500).unref();
   if((!Object.keys(store.catalog).length||needsChineseCatalog(cached)||cached?.reportStyleVersion!==1||!Object.values(store.catalog).some(c=>c.password&&c.category))&&process.env.MD_TEST_MODE!=='1')void updateCatalog();
 });

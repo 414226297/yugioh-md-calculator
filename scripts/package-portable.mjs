@@ -26,7 +26,7 @@ const appPackage={name:pkg.name,version:pkg.version,description:pkg.description,
 writeFileSync(path.join(appDir,'package.json'),JSON.stringify(appPackage,null,2)+'\n');
 function collect(dir){return readdirSync(dir,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?collect(path.join(dir,entry.name)):[path.join(dir,entry.name)]);}
 const compiled=collect(path.join(root,'src')).filter(p=>p.endsWith('.ts')&&!p.endsWith('.d.ts')).map(p=>path.relative(path.join(root,'src'),p).replace(/\.ts$/,'.js'));
-compiled.push('reader/owned/MD.MemoryHost.exe','desktop/preload.cjs','desktop/overlay-preload.cjs','desktop/window-tracker.ps1','ui/index.html','ui/style.css','ui/overlay.html','ui/overlay.css');
+compiled.push('reader/owned/MD.MemoryHost.exe','desktop/preload.cjs','desktop/overlay-preload.cjs','desktop/window-tracker.ps1','ui/index.html','ui/style.css','ui/overlay.html','ui/overlay.css','ui/modules.html','ui/modules.css','ui/preparation.html','ui/preparation.css');
 compiled.push(...collect(path.join(root,'src','ui','assets')).map(p=>path.relative(path.join(root,'src'),p)));
 for(const relative of compiled){
   const source=path.join(root,'dist',relative),destination=path.join(appDir,'dist',relative);

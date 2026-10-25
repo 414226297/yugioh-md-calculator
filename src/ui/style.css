@@ -16,3 +16,18 @@ header{height:52px;padding:0 13px}main{padding:5px 10px 12px}.panel{padding:10px
 [data-theme=light] input,[data-theme=light] select,[data-theme=light] textarea{background:#fff;color:#253241;border-color:#a9b5c5}[data-theme=light] .primary{background:#d4ece7;border-color:#73a99d}[data-theme=light] .list-row{border-color:var(--line)}[data-theme=light] button.public-hand-card{background:transparent}
 [data-theme=light] .card-category.monster,[data-theme=light] .backrow-cell.monster{color:#94500f;border-color:#c7a078}[data-theme=light] .card-category.spell,[data-theme=light] .backrow-cell.spell{color:#21654f;border-color:#82af9e}[data-theme=light] .card-category.trap,[data-theme=light] .backrow-cell.trap{color:#8b3f83;border-color:#bd92b8}[data-theme=light] .backrow-cell.empty-slot{background:transparent;color:#68798b}
 [data-theme=light] #deck-status.warn{background:#fff2d9;color:#936000;border-color:#c69948}[data-theme=light] #deck-status:not(.warn){background:#e0f2e5;color:#25633b;border-color:#80ac8d}[data-theme=light] #deck-status-tip{background:#fff2d9;color:#805200;border-color:#c69948}[data-theme=light] #deck-status-tip:before{background:#fff2d9;border-color:#c69948}[data-theme=light] #deck-status:not(.warn)+#deck-status-tip,[data-theme=light] #deck-status:not(.warn)+#deck-status-tip:before{background:#e0f2e5;color:#25633b;border-color:#80ac8d}[data-theme=light] #toast{background:#fff2d9;color:#805200}
+
+/* Independent settings window: module switches and all adjustments live here. */
+.settings-window #content{padding:18px 22px}.settings-window #deck-status,.settings-window #settings{display:none}
+.settings-nav{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px}.settings-nav button[aria-current=page]{border-color:var(--cyan);color:var(--cyan)}
+.module-settings{width:100%;border-collapse:collapse;margin:12px 0}.module-settings th,.module-settings td{padding:12px 8px;border-bottom:1px solid var(--line)}
+.module-settings th:first-child{text-align:left;width:50%;font-weight:500}.module-settings td,.module-settings thead th:not(:first-child){text-align:center}
+.module-settings small{display:block;min-height:16px;margin-top:5px;color:var(--muted)}
+.display-settings input[role=switch]{appearance:none;position:relative;width:36px;height:21px;padding:0;border-radius:12px;border:1px solid var(--muted);background:transparent;cursor:pointer;vertical-align:middle}
+.display-settings input[role=switch]::after{content:'';position:absolute;width:13px;height:13px;top:3px;left:3px;border-radius:50%;background:var(--muted)}
+.display-settings input[role=switch]:checked{background:#277b75;border-color:#6cdbd0}.display-settings input[role=switch]:checked::after{left:18px;background:#eafffb}
+.display-settings input[role=switch]:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}.display-settings input:disabled{opacity:.5;cursor:wait}
+.display-option{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:12px 0}.display-option small{display:block;color:var(--muted);font-size:12px;margin-top:5px}
+.settings-window .form-row{margin-bottom:12px}.settings-window .panel{margin-bottom:22px}
+
+#sidebar-modules{display:flow-root}#sidebar-modules>:last-child{margin-bottom:0}

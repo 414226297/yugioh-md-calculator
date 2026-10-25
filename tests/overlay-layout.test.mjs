@@ -26,7 +26,7 @@ test('known hand labels use total hand count for leftmost card spacing and scale
  const client={x:0,y:0,width:1366,height:768};
  const a=handOverlayBounds(client,0,5),b=handOverlayBounds(client,1,5);
  assert.equal(b.x-a.x,80);assert.equal(a.x+a.width/2,523);
- assert.equal(a.y+a.height,57);
+ assert.equal(a.y,35);assert.equal(a.height,67);
  assert.equal(handOverlayBounds(client,0,2).x+23,643);
  assert.ok(handOverlayBounds(client,0,6).y<handOverlayBounds(client,2,6).y);
  for(const count of [1,2,3,4,5,6,10,20]){
@@ -36,4 +36,13 @@ test('known hand labels use total hand count for leftmost card spacing and scale
  const small=handOverlayBounds({x:-50,y:100,width:683,height:384},0,5);
  assert.ok(Math.abs(small.x-(-50+a.x/2))<=1);assert.ok(Math.abs(small.y-(100+a.y/2))<=1);
  assert.equal(handOverlayBounds(client,2,2),null);assert.equal(handOverlayBounds(client,0,0),null);
+});
+
+import {clipOverlayRegions} from '../dist/domain/overlay-layout.js';
+test('measured overlay regions preserve panel bottom and trigger edge at fractional DPI',()=>{
+ const regions=clipOverlayRegions(300,600,[{x:1.15,y:360.4,width:297.7,height:210.6},{x:1.15,y:568.7,width:203.08,height:29.9}]);
+ assert.deepEqual(regions,[{x:1,y:360,width:298,height:211},{x:1,y:568,width:204,height:31}]);
+ assert.ok(regions[0].y+regions[0].height>regions[1].y,'overlap at the join must not crop the panel bottom');
+ assert.deepEqual(clipOverlayRegions(300,600,[{x:-1,y:590,width:302,height:20}]),[{x:0,y:590,width:300,height:10}]);
+ assert.deepEqual(clipOverlayRegions(300,600,[{x:0,y:NaN,width:20,height:20}]),[]);
 });

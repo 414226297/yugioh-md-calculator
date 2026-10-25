@@ -30,7 +30,7 @@ export class DuelStore {
       if(s.publicHandEvents)this.publicHandMemory=this.publicHands.pending?{...s,counts:{...s.counts,opponentHand:this.publicHands.committedHandCount}}:s;
       // Public records survive read gaps; counts used by the calculator remain
       // the current snapshot. Pending hand/log races keep the prior hand layout.
-      this.overlayMemory={...s,counts:{...s.counts,opponentHand:this.publicHandMemory?.counts.opponentHand??s.counts.opponentHand},opponentPublicSlots:s.opponentPublicSlots??this.overlayMemory?.opponentPublicSlots};
+      this.overlayMemory={...s,duelStarted:s.duelStarted===true||this.overlayMemory?.duelStarted===true,counts:{...s.counts,opponentHand:this.publicHandMemory?.counts.opponentHand??s.counts.opponentHand},opponentPublicSlots:s.opponentPublicSlots??this.overlayMemory?.opponentPublicSlots};
     }
     if(s.status==='duel'&&s.session!==this.lastSession){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=this.deckPrepared&&this.deck?s.session:null;this.deckPrepared=false;this.lastSession=s.session;}
     if(s.status==='menu'||s.status==='waiting'){this.overrides={};this.monsterOverride=null;this.checkpoint=undefined;this.boundSession=null;this.lastSession=null;}

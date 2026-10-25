@@ -40,7 +40,8 @@ export function readActions(log: Ref, myTeam: number) {
   }
   // The opening draw blocks must be present. Absence is not silently treated as a complete history.
   const opening = base.slice(0,8).filter(x=>x.get('loglabel')==='CardMoveMulti').length>=2;
-  return {moves,logLength:base.length,completeLog:opening,handChanges};
+  const duelStarted=base.some(x=>['ShowTurn','ShowPhase'].includes(x.get('loglabel')));
+  return {moves,logLength:base.length,completeLog:opening,handChanges,duelStarted};
 }
 type ActionHistory={session:string;team:number;length:number;baseIdentity:number|null;frames:number;prefix:Array<{label:string;index:number}>;runningCard:number;moves:Move[];handChanges:HandChange[]};
 function indexed(ref:Ref|null,index:number,max=5000):Ref|undefined{
@@ -92,7 +93,8 @@ export function readActionsIncremental(log:Ref,myTeam:number,session:string,prev
   }
   const completeLog=prefix.slice(0,8).filter(x=>x.label==='CardMoveMulti').length>=2;
   const history:ActionHistory={session,team:myTeam,length:prefix.length,baseIdentity,frames:reusable?previous!.frames+1:1,prefix,runningCard,moves,handChanges};
-  return {result:{moves,logLength:length,completeLog,handChanges},history};
+  const duelStarted=prefix.some(x=>x.label==='ShowTurn'||x.label==='ShowPhase');
+  return {result:{moves,logLength:length,completeLog,handChanges,duelStarted},history};
 }
 /** Input permission also changes at prompts/opponent turns; it is not a scene-stability signal. */
 export class SceneStability {
@@ -125,7 +127,7 @@ export class NativeReader {
       const counts=(field:string)=>{const ids:Record<string,number>={};for(const item of list(current.get(field),100)){const id=cardId(item.get('CardID'));ids[id]=(ids[id]??0)+1;}return ids;};
       deck={id:String(current.get('m_DeckID')),name:current.get('m_DeckName'),main:counts('m_MainDeckCards'),extra:counts('m_ExtraDeckCards'),readAt:Date.now()};
     }
-    const result: Snapshot={status:'menu',session:null,timestamp:Date.now(),counts:emptyCounts(),monsters:[],myTeam:0,extraCount:null,banishedCount:null,moves:[],logLength:0,completeLog:false,deck};
+    const result: Snapshot={status:'menu',session:null,readerPid:this.pid,timestamp:Date.now(),counts:emptyCounts(),monsters:[],myTeam:0,extraCount:null,banishedCount:null,moves:[],logLength:0,completeLog:false,deck};
     if(deck)result.deckSource='editor';
     // Capture server-backed contents while an editor/selection child view is open.
     // Do not stamp the editor's potentially unsaved card list with a saved revision.
@@ -135,6 +137,7 @@ export class NativeReader {
     }
     if(current?.getClassName()==='YgomGame.Colosseum.ColosseumInfoViewController'){
       this.preparationSeen=true;
+      result.preparationVisible=true;
       result.deckSource='preparation';
       try{Object.assign(result,readPreparation(current,c.getClass('YgomSystem.Utility.ClientWork').get('s_data')));}
       catch{result.deck=null;result.deckSelection=null;result.reason='准备页面牌组尚未读取完整，等待更新';}

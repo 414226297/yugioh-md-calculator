@@ -22,11 +22,14 @@ export interface Snapshot {
   banishedCount: number | null; moves: Move[]; logLength: number;
   completeLog: boolean; deck: Deck | null; reason?: string; version?: string;
   busy?: boolean;
+  /** Public turn/phase log confirms gameplay has started, not just scene loading. */
+  duelStarted?:boolean;
   publicHandBusy?: boolean;
   opponentSetSlots?:number[];
   opponentPublicSlots?:number[];
   /** duel means the local player's initial deck was read from this duel's settings. */
   deckSource?: 'editor' | 'duel' | 'preparation';
+  preparationVisible?:boolean;readerPid?:number;
   deckSelection?:DeckSelection|null;
   cachedPreparationDeck?:Deck;
   publicHandEvents?:PublicHandEvent[];
