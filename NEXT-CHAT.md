@@ -141,3 +141,5 @@ release、local-data、test-results是忽略目录，不纳入Git；产物不包
 ## 0.3.1发布准备（2026-10-30）
 
 用户授权更新版本、本地Git、推送GitHub及Releases。package.json/README更新为0.3.1，重新构建release/md-cannon-assistant-0.3.1-win-x64-1793331139864.exe，SHA256 bda7f17e64155cf2ddb7cfe2746eae054002a19c8bbcbb3d81ed260a80fb3001。发行仅上传EXE与sha256，不包括私人数据或工作区额外安装器。
+
+0.3.1发布已完成：源码提交68a7329已推送origin/main，Release https://github.com/414226297/yugioh-md-calculator/releases/tag/v0.3.1 为公开非草稿。EXE及sha256附件均已上传，GitHub EXE digest与本地bda7f17e64155cf2ddb7cfe2746eae054002a19c8bbcbb3d81ed260a80fb3001一致，大小173009408。隔离解包版本及资源验证通过。无关Untapped安装器未纳入Git。
