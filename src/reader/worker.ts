@@ -1,3 +1,4 @@
+import {defaultUnityVersion} from './version.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { NativeReader } from './native-reader.js';
@@ -24,7 +25,7 @@ while(true){
       if(!pid){send(blank('waiting','等待 MD 启动'));await wait(2000);continue;}
       if(!reader)reader=process.env.MD_READER_BACKEND==='owned'
        ?await OwnedReader.connect(process.env.MD_OWNED_READER_EXE!,pid)
-       :new NativeReader(process.env.MD_SCRY_PATH!,pid,process.env.MD_UNITY_VERSION??'6000.0.61f1');
+       :new NativeReader(process.env.MD_SCRY_PATH!,pid,process.env.MD_UNITY_VERSION??defaultUnityVersion);
     }
     send(await reader!.read());failures=0;
   }catch(error){

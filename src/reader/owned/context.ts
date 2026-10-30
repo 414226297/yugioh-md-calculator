@@ -6,6 +6,7 @@ import {SnapshotUpdatingError} from '../snapshot-error.js';
 class NeedRead {constructor(readonly address:bigint,readonly length:number){}}
 /** Verified against game binary hash; refuse other builds instead of guessing. */
 export const layout={sha256:'ca24a284a86dc394f6b0cbeaad455d29e5f6b95fc8db8fc42812b29de3c7620c',classTableRva:63406416};
+export const supportedLayouts=[layout,{sha256:'9248d99205f6a35a53b53076d53e06fa4c353e07052fd41277cab18f370740f6',classTableRva:66100576}];
 type Field={name:string;type:bigint;offset:number;static:boolean};
 export class OwnedContext {
  private cache=new Map<string,Buffer>();
@@ -24,9 +25,10 @@ export class OwnedContext {
  static async create(memory:MemoryTransport,metadataPath:string){
   const module=(await memory.modules()).find(m=>m.name==='GameAssembly.dll');if(!module)throw Error('GameAssembly.dll not loaded');
   const hash=createHash('sha256').update(readFileSync(module.path)).digest('hex');
-  if(hash!==layout.sha256)throw Error('自有读取后端尚未适配此游戏版本');
+  const matched=supportedLayouts.find(candidate=>candidate.sha256===hash);
+  if(!matched)throw Error('自有读取后端尚未适配此游戏版本');
   const context=new OwnedContext(memory,BigInt(module.address),new Metadata31(readFileSync(metadataPath)));
-  context.table=(await memory.read(context.base+BigInt(layout.classTableRva),8)).readBigUInt64LE();
+  context.table=(await memory.read(context.base+BigInt(matched.classTableRva),8)).readBigUInt64LE();
   if(context.table<65536n)throw Error('Class table unavailable');return context;
  }
  /** Replay a synchronous snapshot builder while satisfying missing exact reads.
@@ -84,7 +86,8 @@ export class OwnedContext {
  typeClass(type:bigint){
   const data=this.ptr(type),kind=this.bytes(type+10n,1)[0];
   if(kind===21){const k=this.ptr(data+24n);if(!k)throw Error('Generic class uninitialized');return k;}
-  const index=this.typeIndices.get(this.i32(data+8n));if(index===undefined)throw Error('Type handle invalid');
+  const width=this.metadata.typeIndexWidth;
+  const index=this.typeIndices.get(this.bytes(data+8n,width).readUIntLE(0,width));if(index===undefined)throw Error('Type handle invalid');
   const k=this.ptr(this.table+BigInt(index*8));if(!k)throw Error('Value class uninitialized');return k;
  }
  decode(a:bigint,type:bigint):any{

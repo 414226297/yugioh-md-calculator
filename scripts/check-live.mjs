@@ -1,9 +1,10 @@
+import {defaultUnityVersion} from '../dist/reader/version.js';
 import {execFileSync} from 'node:child_process';
 import {NativeReader} from '../dist/reader/native-reader.js';
 import {mkdirSync,writeFileSync} from 'node:fs';
 const pid=Number(execFileSync('powershell.exe',['-NoProfile','-Command','Get-Process masterduel | Select-Object -ExpandProperty Id'],{encoding:'utf8'}).trim());
 const modulePath=process.env.MD_SCRY_PATH??process.env.LOCALAPPDATA+'/Programs/untapped-companion/resources/app.asar.unpacked/node_modules/untapped-scry/lib/binding/napi-v5/untapped-scry.node';
-const snapshot=new NativeReader(modulePath,pid,'6000.0.61f1').read();
+const snapshot=new NativeReader(modulePath,pid,process.env.MD_UNITY_VERSION??defaultUnityVersion).read();
 mkdirSync('local-data',{recursive:true});
 writeFileSync('local-data/live-snapshot.json',JSON.stringify(snapshot,null,2));
 console.log(JSON.stringify({status:snapshot.status,counts:snapshot.counts,extra:snapshot.extraCount,banished:snapshot.banishedCount,events:snapshot.moves.length,completeLog:snapshot.completeLog,deck:snapshot.deck&&{name:snapshot.deck.name,main:Object.values(snapshot.deck.main).reduce((a,b)=>a+b,0),extra:Object.values(snapshot.deck.extra).reduce((a,b)=>a+b,0),kinds:Object.keys(snapshot.deck.extra).length}},null,2));

@@ -16,10 +16,16 @@ test('hand label mode restores compact height without changing hand position',()
  assert.equal(label.height,22);assert.equal(thumb.height,67);
  for(const k of ['x','y','width'])assert.equal(label[k],thumb[k]);
 });
-test('known set card thumbnail applies screenshot alignment correction and scales with viewport',()=>{
+test('compact set card hints preserve the card center when resizing and scale with viewport',()=>{
  const client={x:0,y:0,width:1360,height:765};
  const label=overlayBounds(client,9),thumb=overlayBounds(client,9,0,0,true);
- assert.equal(thumb.width,label.width);assert.equal(thumb.x-label.x,8);assert.ok(Math.abs(thumb.y+thumb.height-label.y-label.height-10)<=1);
+ assert.equal(thumb.width,40);assert.equal(thumb.height,58);
+ assert.equal(thumb.x+thumb.width/2-(label.x+label.width/2),8);
+ assert.ok(Math.abs(thumb.y+thumb.height/2-124)<=.5);
+ assert.equal(label.y+label.height/2,124);
+ const shifted=overlayBounds(client,9,1,2,true);
+ assert.ok(Math.abs(shifted.x-thumb.x-13.6)<=1);
+ assert.ok(Math.abs(shifted.y-thumb.y-15.3)<=1);
  assert.ok(Math.abs(thumb.height/thumb.width-1.46)<.02);
  const smaller=overlayBounds({x:100,y:200,width:680,height:382.5},9,0,0,true);
  assert.ok(Math.abs(smaller.y-200-thumb.y/2)<=1);assert.ok(Math.abs(smaller.height-thumb.height/2)<=1);

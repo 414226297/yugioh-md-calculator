@@ -41,7 +41,7 @@ function render(next:Payload|null){
  if(next.kind==='tag'){
   const hand=next.source==='hand',button=node('button',next.label,`tag ${next.category??''} ${hand?'hand-tag':''}`);
   button.style.width=`${next.width}px`;button.style.height=`${next.height}px`;
-  button.setAttribute('aria-label',`查看${hand?'公开手牌':next.possible?'盖牌候选':'盖牌'}：${next.name??next.label}`);
+  button.setAttribute('aria-label',`查看${hand?(next.possible?'手牌候选':'公开手牌'):next.possible?'盖牌候选':'盖牌'}：${next.name??next.label}`);
   button.onclick=()=>void api.select(next.slot!,hand);
   button.title=(next.possible?'可能是（依据公开信息，并未确认）：':'')+(next.name??next.label??'');
   if(next.style==='thumbnail'){

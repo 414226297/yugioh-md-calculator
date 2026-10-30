@@ -1,3 +1,4 @@
+import {defaultUnityVersion} from '../dist/reader/version.js';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
@@ -40,7 +41,7 @@ writeFileSync(path.join(output,'使用说明.txt'),[
  '2. 双击EXE自动准备运行文件，无需手动解压或安装 Node.js、pnpm 或 Codex。',
  '3. 默认使用自有只读后端，无需安装 Untapped；仅支持已适配的 MD 版本。',
  '   如切换到兼容后端，则需要本机 Untapped 模块。',
- '4. 本机验证的 Unity 版本为6000.0.61f1。游戏/读取模块更新后需要重新验证，',
+ `4. 默认 Unity 版本为${defaultUnityVersion}。游戏/读取模块更新后需要重新验证，`,
  '   不保证所有版本都能读取。出现待核对或读取失败时，不要沿用旧结果。',
  '5. 首次启动联网获取公开卡片属性；没有缓存且无法下载时，计算需要等待。',
  '6. 对战准备页面自动识别已知牌组；首次缺少卡表时打开牌组编辑界面获取。',

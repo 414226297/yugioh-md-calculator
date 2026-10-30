@@ -100,8 +100,8 @@ export function readActionsIncremental(log:Ref,myTeam:number,session:string,prev
 export class SceneStability {
   private previous = '';
   private at = 0;
-  busy(key: string, now: number) {
-    const busy = key !== this.previous || now - this.at > 2000 || now < this.at;
+  busy(key: string, now: number, maxGap = 2000) {
+    const busy = key !== this.previous || now - this.at > maxGap || now < this.at;
     this.previous = key; this.at = now;
     return busy;
   }
@@ -200,6 +200,8 @@ export class NativeReader {
     if(snapshot.status==='duel'&&this.pendingActionHistory)this.actionHistory=this.pendingActionHistory;
     if(snapshot.status!=='duel'||!snapshot.session)return {...snapshot,timestamp};
     const key=JSON.stringify({session:snapshot.session,counts:snapshot.counts,monsters:snapshot.monsters,extra:snapshot.extraCount,banished:snapshot.banishedCount,events:{moves:snapshot.moves,logLength:snapshot.logLength,completeLog:snapshot.completeLog},publicHandObservation:snapshot.publicHandObservation});
-    return {...snapshot,timestamp,busy:this.stability.busy(key,timestamp)};
+    // Every owned snapshot already passed memory consistency checks; slow reads
+    // must not keep an unchanged scene busy forever. Consumer freshness checks remain.
+    return {...snapshot,timestamp,busy:this.stability.busy(key,timestamp,Infinity)};
   }
 }

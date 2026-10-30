@@ -8,12 +8,14 @@ try{
  await app.evaluate(({ipcMain})=>ipcMain._invokeHandlers.get('test:tray')({},'show'));
  let settings;for(let i=0;i<40;i++){settings=(await app.windows()).find(p=>p.url().includes('window=settings'));if(settings)break;await new Promise(r=>setTimeout(r,50));}
  assert.equal(await main.locator('#settings').count(),0);assert.equal(await main.locator('button#deck-status').count(),0);
- assert.ok(settings);await settings.locator('.module-settings').waitFor();
- assert.equal(await main.locator('#config-form').count(),0);assert.equal(await settings.locator('.module-settings tbody tr').count(),5);
- assert.equal(await settings.locator('[data-display="info"]').count(),0);
- assert.equal(await settings.locator('.module-settings tbody tr').nth(0).locator('td').nth(1).innerText(),'');
- assert.equal(await settings.locator('.module-settings [data-display="handOverlayEnabled"]').count(),1);
- assert.equal(await settings.locator('.module-settings [data-display="backrowOverlayEnabled"]').count(),1);
+ assert.ok(settings);await settings.locator('#sidebar-settings').waitFor();
+ assert.equal(await main.locator('#config-form').count(),0);
+ assert.equal(await settings.locator('#sidebar-settings [data-display="sidebar"]').count(),5);
+ assert.equal(await settings.locator('#hand-settings [data-display="handOverlayEnabled"]').count(),1);
+ assert.equal(await settings.locator('#backrow-settings [data-display="backrowOverlayEnabled"]').count(),1);
+ const fields=await settings.locator('#config-form').evaluate(form=>Object.keys(Object.fromEntries(new FormData(form))));
+ assert.deepEqual(fields.sort(),['height','interval','launchUntapped','modulePath','overlayOffsetX','overlayOffsetY','readerBackend','theme','unityVersion','width'].sort());
+ await settings.screenshot({path:'test-results/settings-grouped.png'});
  await settings.locator('#hand-overlay-style').selectOption('label');
  await main.waitForFunction(async()=>(await window.cannon.getState()).config.handOverlayStyle==='label');
  await settings.locator('#hand-overlay-style').selectOption('thumbnail');
@@ -26,16 +28,20 @@ try{
   for(const id of (await window.cannon.getState()).config.sidebarModules)await window.cannon.command('display',{target:'sidebar',id,enabled:false});
  });
  await main.waitForFunction(async()=>(await window.cannon.getState()).config.sidebarModules.length===0);
- assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='MD助手 · 信息侧栏').isVisible()),false);
+ assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('index.html')&&!w.webContents.getURL().includes('window=settings')).isVisible()),false);
  await hand.check();await main.locator('#public-hand').waitFor();
  await main.waitForFunction(()=>innerHeight<480);
+ await settings.locator('.advanced-settings summary').click();
  await settings.locator('#interval').fill('750');
  await settings.locator('[data-display="infoOverlayEnabled"]').uncheck();
  assert.equal(await settings.locator('#interval').inputValue(),'750');
+ await settings.getByRole('button',{name:'保存设置',exact:true}).click();
+ await main.waitForFunction(async()=>(await window.cannon.getState()).config.interval===750);
  const state=await main.evaluate(()=>window.cannon.getState());assert.equal(state.config.infoOverlayEnabled,false);
  await app.evaluate(({ipcMain})=>ipcMain._invokeHandlers.get('test:tray')({},'show'));assert.equal((await app.windows()).filter(p=>p.url().includes('window=settings')).length,1);
  await settings.locator('[data-action="counts"]').click();await settings.locator('#counts-form').waitFor();
- await settings.locator('#close').click();await main.locator('#settings').click();
- await settings.locator('.module-settings').waitFor();
+ await settings.locator('#close').click();await app.evaluate(({ipcMain})=>ipcMain._invokeHandlers.get('test:tray')({},'show'));
+ await settings.locator('[data-action="settings"]').click();
+ await settings.locator('#sidebar-settings').waitFor();
  console.log('PASS independent settings window, module switches, sidebar ordering, draft preservation and reopening');
 }finally{await app.close();}

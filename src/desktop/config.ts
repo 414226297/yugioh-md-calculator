@@ -1,3 +1,4 @@
+import {defaultUnityVersion} from '../reader/version.js';
 import path from 'node:path';
 import {validateModules,defaultSidebarModules,toggleModule,type ModuleId} from '../domain/modules.js';
 import {existsSync} from 'node:fs';
@@ -20,7 +21,7 @@ export function dataDirectory(root:string,appData:string,packaged:boolean,testMo
 export function redactLocalPaths(message:string):string {
   return message.replace(/[A-Z]:[\\/][^\r\n"'<>]*/gi,'<local-path>').replace(/\/(?:Users|home)\/[^\s/]+/g,'<user-home>');
 }
-export const defaults = ():Config=>({readerBackend:'owned',modulePath:resolveModulePath(),unityVersion:'6000.0.61f1',interval:500,width:300,height:850,theme:'dark',overlayEnabled:true,overlayOffsetX:0,overlayOffsetY:0});
+export const defaults = ():Config=>({readerBackend:'owned',modulePath:resolveModulePath(),unityVersion:defaultUnityVersion,interval:500,width:300,height:850,theme:'dark',overlayEnabled:true,overlayOffsetX:0,overlayOffsetY:0});
 export function validateConfig(c:Config):Config {
   if(c.launchUntapped!==undefined&&typeof c.launchUntapped!=='boolean')throw Error('联动启动设置无效');
   const selectedModules=validateModules(c.selectedModules??[]);

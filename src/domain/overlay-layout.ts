@@ -1,4 +1,17 @@
 import type {SetCard} from './model.js';
+import type {PublicHandView} from './public-hand.js';
+/** Display public candidates too, without asserting their identity or hand position. */
+export function handOverlayEntries(hand:PublicHandView,count:number){
+ const entries:{id:number;slot:number;possible:boolean}[]=[],copies=new Map<number,number>();
+ if(!Number.isInteger(count)||count<1||count>100)return entries;
+ for(const [cards,possible] of [[hand.cards,false],[hand.uncertainCards,true]] as const){
+  for(const card of cards)for(let i=0;i<card.count&&entries.length<count;i++){
+   const copy=copies.get(card.id)??0;copies.set(card.id,copy+1);
+   entries.push({id:card.id,slot:-(card.id*128+copy+1),possible});
+  }
+ }
+ return entries;
+}
 export interface Bounds {x:number;y:number;width:number;height:number}
 /** Lower-left tab at the marked area, with room to grow upward within the card report. */
 export function moduleOverlayBounds(client:Bounds):Bounds {
@@ -19,15 +32,15 @@ export function handOverlayBounds(client:Bounds,index:number,count:number,style:
  const lift=lifts[count]?.[index]??0;
  return {x:Math.round(left+width*(683+(index-(count-1)/2)*step-w/2)/1366),y:Math.round(top+height*(44-lift)/768),width:Math.max(1,Math.round(width*w/1366)),height:Math.max(1,Math.round(height*(style==='label'?22:w*1.46)/768))};
 }
-/** Reference card bottoms from the approved real 16:9 screenshot. All units
+/** Small interactive hints centered on the reference card, leaving its edges free. All units
  * here are physical pixels; the desktop adapter converts each result to DIP. */
 export function overlayBounds(client:Bounds,slot:number,offsetX=0,offsetY=0,thumbnail=false):Bounds|null {
  if(!Object.values(client).every(Number.isFinite)||client.width<480||client.height<270||slot<7||slot>11)return null;
  const width=Math.min(client.width,client.height*16/9),height=width*9/16;
  const left=client.x+(client.width-width)/2,top=client.y+(client.height-height)/2;
  const index=11-slot;
- const w=width*48/1360,labelHeight=height*20/765,h=thumbnail?w*1.46:labelHeight;
- return {x:Math.round(left+width*(.3265+index*.084+offsetX/100)-w/2+(thumbnail?width*8/1360:0)),y:Math.round(top+height*(129/765+offsetY/100)+labelHeight-h+(thumbnail?height*10/765:0)),width:Math.max(1,Math.round(w)),height:Math.max(1,Math.round(h))};
+ const w=width*(thumbnail?40:48)/1360,labelHeight=height*20/765,h=thumbnail?w*1.46:labelHeight;
+ return {x:Math.round(left+width*(.3265+index*.084+offsetX/100)-w/2+(thumbnail?width*8/1360:0)),y:Math.round(top+height*(124/765+offsetY/100)-h/2),width:Math.max(1,Math.round(w)),height:Math.max(1,Math.round(h))};
 }
 /** Match the native left card report in the user's 1366x768 game screenshot. */
 export function overlayDetailBounds(client:Bounds):Bounds {

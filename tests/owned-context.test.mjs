@@ -34,3 +34,13 @@ test('owned metadata strings decode UTF-8 and stop at page boundaries',async()=>
  assert.equal(await c.run(()=>c.cstring(start)),'字段');
  assert.ok(calls.every(({address,length})=>Number(address%4096n)+length<=4096));const before=calls.length;assert.equal(await c.run(()=>c.cstring(start)),'字段');assert.equal(calls.length,before);
 });
+
+test('value type handles use metadata index width without consuming adjacent parent bytes',()=>{
+ for(const width of [1,2,4]){
+  const c=new OwnedContext({},0n,{typeCount:1,typeIndexWidth:width,getType:()=>({byvalTypeIndex:17,fullName:'Fixture.Value'})});
+  c.table=0x30000n;
+  c.ptr=a=>a===0x10000n?0x20000n:a===0x30000n?0x40000n:0n;
+  c.bytes=(a,n)=>{if(a===0x1000an)return Buffer.from([17]);assert.equal(a,0x20008n);assert.equal(n,width);const b=Buffer.alloc(n);b.writeUIntLE(17,0,n);return b;};
+  assert.equal(c.typeClass(0x10000n),0x40000n);
+ }
+});

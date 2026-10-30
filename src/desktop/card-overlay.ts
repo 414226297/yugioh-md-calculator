@@ -3,7 +3,7 @@ import {BrowserWindow,screen,ipcMain,type WebContents} from 'electron';
 import {fileURLToPath} from 'node:url';
 import type {DuelStore} from '../domain/store.js';
 import type {Config} from './config.js';
-import {overlayBounds,handOverlayBounds,overlayDetailBounds,clipOverlayRegions,backrowOverlayPreview,type Bounds} from '../domain/overlay-layout.js';
+import {overlayBounds,handOverlayBounds,handOverlayEntries,overlayDetailBounds,clipOverlayRegions,backrowOverlayPreview,type Bounds} from '../domain/overlay-layout.js';
 import {WindowTracker,type GameWindow} from './window-tracker.js';
 import {moduleOverlayBounds} from '../domain/overlay-layout.js';
 import {validateModules,type ModuleId} from '../domain/modules.js';
@@ -132,14 +132,13 @@ export class CardOverlay {
    const handCount=s.counts.opponentHand;
    let handIndex=0;
    if(handCount!==null&&Number.isInteger(handCount)&&handCount>0){
-    for(const card of view.publicHand.cards){
-     for(let copy=0;copy<card.count&&handIndex<handCount;copy++,handIndex++){
+    for(const card of handOverlayEntries(view.publicHand,handCount)){
       const bounds=handOverlayBounds(client,handIndex,handCount,config.handOverlayStyle);if(!bounds)continue;
       // Stable identity prevents an open report changing when another card leaves.
-      const slot=-(card.id*128+copy+1),category=view.catalog[card.id]?.category;
-      handCards.push({slot,candidates:[card.id],confirmedId:card.id,unknownPossible:false});
-      if(handEnabled){active.add(slot);this.place(slot,bounds,{kind:'tag',source:'hand',style:config.handOverlayStyle??'thumbnail',slot,label:category?{monster:'怪',spell:'魔',trap:'陷'}[category]:'卡',theme:config.theme,category,name:view.catalog[card.id]?.name,password:view.catalog[card.id]?.password});}
-     }
+      const slot=card.slot,category=view.catalog[card.id]?.category;
+      handCards.push({slot,candidates:[card.id],...(card.possible?{}:{confirmedId:card.id}),unknownPossible:card.possible});
+      if(handEnabled){active.add(slot);this.place(slot,bounds,{kind:'tag',source:'hand',possible:card.possible,style:config.handOverlayStyle??'thumbnail',slot,label:category?{monster:'怪',spell:'魔',trap:'陷'}[category]:'卡',theme:config.theme,category,name:view.catalog[card.id]?.name,password:view.catalog[card.id]?.password});}
+      handIndex++;
     }
    }
    let chosen=[...cards,...handCards].find(c=>c.slot===this.selected);

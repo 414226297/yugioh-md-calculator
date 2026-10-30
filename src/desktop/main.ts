@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {createCompanionLauncher} from './companion-launch.js';
 import {sidebarHeight} from '../domain/sidebar-layout.js';
 import {defaultSidebarModules} from '../domain/modules.js';
 import {CardOverlay} from './card-overlay.js';
@@ -74,13 +74,17 @@ function begin(){
   }
   host.start({MD_READER_BACKEND:'companion',MD_SCRY_PATH:config.modulePath,MD_UNITY_VERSION:config.unityVersion,MD_INTERVAL:String(config.interval)});
 }
-function launchUntapped(){
+const ensureCompanion=createCompanionLauncher();
+async function launchUntapped(){
+ if(process.env.MD_TEST_MODE==='1')return;
+ try{await ensureCompanion(()=>{
  const module=resolveModulePath(config.modulePath);
  const base=module.replace(/[\\/]resources[\\/].*$/i,'');
  const candidates=[path.join(process.env.LOCALAPPDATA??'','Programs','untapped-companion','Untapped.gg Companion.exe'),path.join(base,'Untapped.gg Companion.exe'),path.join(base,'Untapped Companion.exe')];
  const executable=candidates.find(p=>existsSync(p));
- if(!executable){notice='未找到 Untapped.gg，请检查安装位置后手动启动。';publish();return;}
- const child=spawn(executable,[],{detached:true,stdio:'ignore',windowsHide:true});child.on('error',()=>{notice='Untapped.gg 启动失败，请手动启动。';publish();});child.unref();
+ if(!executable)throw Error('未找到 Untapped.gg，请检查安装位置后手动启动。');
+ return executable;
+ });}catch(error){notice=error instanceof Error?error.message:'Untapped.gg 启动失败，请手动启动。';publish();}
 }
 async function updateCatalog(){
   if(downloading)return;downloading=true;catalogMessage='正在获取中文卡名与卡片属性';publish();
@@ -225,7 +229,7 @@ app.whenReady().then(async()=>{
   });
   await win.loadFile(fileURLToPath(new URL('../ui/index.html',import.meta.url)));
   syncSidebar();await showSettings();
-  if(config.launchUntapped)launchUntapped();
+  if(config.launchUntapped)void launchUntapped();
   begin();setInterval(publish,500).unref();
   if((!Object.keys(store.catalog).length||needsChineseCatalog(cached)||cached?.reportStyleVersion!==1||!Object.values(store.catalog).some(c=>c.password&&c.category))&&process.env.MD_TEST_MODE!=='1')void updateCatalog();
 });

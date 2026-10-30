@@ -4,6 +4,8 @@ import {readActions} from '../dist/reader/native-reader.js';
 import {handChange,PublicHandTracker} from '../dist/reader/public-hand.js';
 import {publicHand} from '../dist/domain/public-hand.js';
 import {scene} from './fixtures/scenes.mjs';
+import {DuelStore} from '../dist/domain/store.js';
+import {handOverlayEntries} from '../dist/domain/overlay-layout.js';
 const ref=o=>({get:k=>o[k]});
 const list=a=>ref({_size:a.length,_items:{at:i=>a[i]}});
 const hidden=o=>({get:k=>{if(k==='dataint')throw Error('hidden source identity read');return o[k];}});
@@ -19,6 +21,35 @@ function log(rows){
  return ref({m_LogBaseItemList:list(base),m_DataList_ShowCardName:list(names),m_DataList_ShowAction:list(actions),m_DataList_MoveMulti:list(batches),m_DataList_ShowChain:list([])});
 }
 const view=(events,count)=>publicHand({...scene(),logLength:100,counts:{...scene().counts,opponentHand:count},publicHandEvents:events});
+
+test('setting a hidden monster from four cards retains public hand candidates in overlays',()=>{
+ for(const known of [[100,200],[100,100]]){
+  const store=new DuelStore(),base=scene();
+  store.catalog={100:{id:100,category:'monster'},200:{id:200,category:'monster'}};
+  const snap=(count,cards,changes,logLength)=>({...base,busy:false,logLength,counts:{...base.counts,opponentHand:count},publicHandObservation:{cards,changes}});
+  store.accept(snap(4,known,[],1));
+  const before=handOverlayEntries(store.view().publicHand,4);
+  // The hidden source throws if anyone attempts to inspect its identity.
+  const changes=handChange(action(36,13,2,9),1,0,0);
+  assert.equal(changes[0].cardId,undefined);
+  store.accept(snap(3,[],changes,2));
+  const hand=store.view().publicHand;
+  assert.deepEqual(hand.cards,known[0]===known[1]?[{id:100,count:1}]:[]);
+  assert.deepEqual(hand.uncertainCards,known[0]===known[1]?[{id:100,count:1}]:[{id:100,count:1},{id:200,count:1}]);
+  const after=handOverlayEntries(hand,3);
+  assert.deepEqual(after.map(c=>c.slot),before.map(c=>c.slot));
+  assert.deepEqual(after.map(c=>c.possible),known[0]===known[1]?[false,true]:[true,true]);
+  store.accept(snap(3,[],changes,2));
+  assert.deepEqual(handOverlayEntries(store.view().publicHand,3),after);
+  assert.deepEqual(handOverlayEntries(hand,0),[]);
+  assert.equal(handOverlayEntries(hand,1).length,1);
+  // Subsequent public evidence consumes the known identity, not all records.
+  store.accept(snap(2,[],[...changes,{key:'2:0',index:2,type:'leave',cardId:100}],3));
+  const remaining=handOverlayEntries(store.view().publicHand,2);
+  assert.equal(remaining.length,1);
+  assert.equal(remaining[0].id,known[1]);
+ }
+});
 
 test('public face-up return enters once, preserves duplicate copies and can leave again',()=>{
  // Actual 2026-10-18 public return #235: source 2/bits13 -> hand13/bits9.

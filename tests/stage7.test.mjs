@@ -16,6 +16,15 @@ test('stable public scene becomes usable without input permission; changes and g
  assert.equal(gate.busy('scene-b',5500),false);
 });
 
+test('validated owned scenes tolerate slow reads but still recheck changes and clock rollback',()=>{
+ const gate=new SceneStability();
+ assert.equal(gate.busy('scene-a',100,Infinity),true);
+ assert.equal(gate.busy('scene-a',3100,Infinity),false);
+ assert.equal(gate.busy('scene-b',6100,Infinity),true);
+ assert.equal(gate.busy('scene-b',9100,Infinity),false);
+ assert.equal(gate.busy('scene-b',8100,Infinity),true);
+});
+
 test('damaged persisted deck is rejected without crashing startup',()=>{
  for(const value of [null,{},'deck',{id:'x'}, {...deck,main:null},{...deck,extra:[]},{...deck,readAt:'yesterday'},{...deck,extra:{'1.5':1}}]){
   assert.equal(validateDeck(value),false);
