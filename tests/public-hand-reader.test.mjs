@@ -7,7 +7,40 @@ import {scene} from './fixtures/scenes.mjs';
 const ref=o=>({get:k=>o[k]});
 const lst=a=>ref({_size:a.length,_items:{at:i=>a[i]}});
 const privateRef=o=>({get:k=>{if(['dataint','m_Mrk','m_UniqueId'].includes(k))throw Error('hidden identity accessed');return o[k];}});
-const action=(type,from,player,to=null,target=player)=>ref({datal:privateRef({datatype:1,databyte0:from,databyte1:player}),datac:ref({datatype:3,databyte1:type}),datar:ref({datatype:to===null?0:1,databyte0:to,databyte1:target})});
+
+test('public destruction resolves the original anonymous monster set without a second hand departure',()=>{
+ for(const copies of [1,2]){
+  const tracker=new PublicHandTracker();
+  tracker.update('monster',10,copies+1,[...Array(copies).fill(100),200],[],1000);
+  const set=handChange(action(13,13,1,2),10,0,0);
+  let events=tracker.update('monster',11,copies,[],set,1100,true,[]);
+  assert.equal(view(events,copies).uncertainCards.find(c=>c.id===100)?.count,1);
+  const gone=handChange(action(21,2,1,16),11,0,0,ref({cardid:100}));
+  events=tracker.update('monster',12,copies,[],[...set,...gone],1200,true,[]);
+  const result=view(events,copies);
+  assert.deepEqual(result.cards,[...(copies===2?[{id:100,count:1}]:[]),{id:200,count:1}]);
+  assert.deepEqual(result.uncertainCards,[]);
+  assert.equal(events.filter(e=>e.type==='leave').length,1);
+  assert.deepEqual(tracker.update('monster',12,copies,[],[...set,...gone],1300,true,[]),events);
+  assert.deepEqual(tracker.setCards(),[]);
+ }
+});
+
+test('new field occupant and later full hand disclosure cannot deduct the old departure twice',()=>{
+ for(const replacement of [false,true]){
+  const tracker=new PublicHandTracker();tracker.update('m',10,2,[100,200],[],1000);
+  const set=handChange(action(13,13,1,2),10,0,0);
+  tracker.update('m',11,1,[],set,1100,true,[]);
+  const changes=[...set];
+  if(replacement)changes.push(...handChange(action(3,15,1,2),11,0,0));
+  else tracker.update('m',11,1,[100],set,1150,true,[]);
+  changes.push(...handChange(action(21,2,1,16),12,0,0,ref({cardid:100})));
+  const result=view(tracker.update('m',13,1,[],changes,1200,true,[]),1);
+  if(replacement)assert.ok(result.uncertainCards.some(c=>c.id===100));
+  else assert.deepEqual(result.cards,[{id:100,count:1}]);
+ }
+});
+const action=(type,from,player,to=null,target=player,publicGraveId)=>ref({datal:publicGraveId===undefined?privateRef({datatype:1,databyte0:from,databyte1:player}):ref({datatype:1,databyte0:from,databyte1:player,dataint:publicGraveId}),datac:ref({datatype:3,databyte1:type}),datar:ref({datatype:to===null?0:1,databyte0:to,databyte1:target})});
 function view(events,count=5,logLength=100){return publicHand({...scene(),logLength,counts:{...scene().counts,opponentHand:count},publicHandEvents:events});}
 test('display gate reads identities only for explicit non-hidden entries',()=>{
  assert.deepEqual(visibleHand([privateRef({m_IsHide:true}),ref({m_IsHide:false,m_Mrk:100})]),[100]);
@@ -19,7 +52,7 @@ test('opponent draws, searches and departures read metadata without hidden ident
  assert.equal(handChange(action(26,15,1,13),1,0,0)[0].type,'enter');
  assert.equal(handChange(action(2,13,1,0),1,0,0)[0].type,'leave');
  assert.equal(handChange(action(13,13,1,7),1,0,0)[0].type,'leave');
- assert.equal(handChange(action(24,13,1,16),1,0,0)[0].type,'leave');
+ assert.equal(handChange(action(24,13,1,16,1,100),1,0,0)[0].type,'leave');
  assert.equal(handChange(action(33,13,1,15),1,0,0)[0].type,'leave');
  assert.deepEqual(handChange(action(26,15,0,13),1,0,0),[]);
  assert.equal(handChange(action(33,16,0,13,1),1,0,0)[0].type,'enter');

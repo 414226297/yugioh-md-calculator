@@ -8,6 +8,7 @@ import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:f
 import {DuelStore} from '../domain/store.js';import {validateDeck,type Snapshot} from '../domain/model.js';
 import {downloadCatalog,needsChineseCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,updateDisplayConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
 import {fetchCatalogResponse} from './catalog-fetch.js';
+import {CatalogRefresh,missingCatalogCards} from '../data/catalog-refresh.js';
 import {downloadCardDetail,type CardDetail} from '../data/card-detail.js';
 import {resolveSelectedDeck} from '../domain/deck-cache.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
@@ -52,6 +53,7 @@ function syncSidebar(){
 function hideSidebar(){sidebarRequested=false;win.hide();}
 function showSidebar(){if(!win||win.isDestroyed())return;if(!(config.sidebarModules??defaultSidebarModules).length){config=validateConfig({...config,sidebarModules:[...defaultSidebarModules]});save('config.json',config);publish();}sidebarRequested=true;if(win.isMinimized())win.restore();syncSidebar();if(win.isVisible())win.focus();}
 const store=new DuelStore();let win:BrowserWindow;let host:ReaderHost;let config=defaults();let notice='';let catalogMessage='';let downloading=false;
+let catalogRefresh=new CatalogRefresh();
 const read=(name:string)=>{try{return JSON.parse(readFileSync(path.join(dataDir,name),'utf8'));}catch{return null;}};
 function save(name:string,value:unknown){const file=path.join(dataDir,name);writeFileSync(file+'.tmp',JSON.stringify(value,null,2));renameSync(file+'.tmp',file);}
 let knownDecks:Record<string,unknown>={};let lastDeckSaved='';
@@ -87,12 +89,19 @@ async function launchUntapped(){
  });}catch(error){notice=error instanceof Error?error.message:'Untapped.gg 启动失败，请手动启动。';publish();}
 }
 async function updateCatalog(){
-  if(downloading)return;downloading=true;catalogMessage='正在获取中文卡名与卡片属性';publish();
+  if(downloading)return;downloading=true;catalogRefresh.start(Date.now());catalogMessage='正在获取中文卡名与卡片属性';publish();
   try{
     const result=await downloadCatalog(fetchCatalogResponse);
-    store.catalog=result.cards;save('catalog.json',{reportStyleVersion:1,source:result.source,fetchedAt:Date.now(),cards:result.cards});catalogMessage='中文卡名与卡片属性已更新';
-  }catch(e){catalogMessage=`属性更新失败，${Object.keys(store.catalog).length?'继续使用本地缓存':'需要联网重试'}：${String(e)}`;}
+    const added=Object.keys(result.cards).filter(id=>!store.catalog[+id]).length;
+    const cards={...store.catalog,...result.cards},now=Date.now();
+    save('catalog.json',{reportStyleVersion:1,source:result.source,fetchedAt:now,cards});store.catalog=cards;
+    catalogRefresh.finish(now,true);catalogMessage=`卡片资料已更新，共 ${Object.keys(cards).length} 张，新增 ${added} 张`;
+  }catch(e){catalogRefresh.finish(Date.now(),false);catalogMessage=`属性更新失败，${Object.keys(store.catalog).length?'继续使用本地缓存':'需要联网重试'}：${String(e)}`;}
   finally{downloading=false;publish();}
+}
+function autoUpdateCatalog(){
+  if(process.env.MD_TEST_MODE==='1'||downloading)return;
+  if(catalogRefresh.due(Date.now(),missingCatalogCards(store.catalog,store.deck,store.snapshot)))void updateCatalog();
 }
 app.whenReady().then(async()=>{
   if(!singleInstance)return;
@@ -100,6 +109,7 @@ app.whenReady().then(async()=>{
   const cachedDeck=read('deck.json');if(cachedDeck&&validateDeck(cachedDeck))store.deck=cachedDeck;
   const cachedDecks=read('decks.json');if(cachedDecks&&typeof cachedDecks==='object'&&!Array.isArray(cachedDecks))knownDecks=cachedDecks;
   const cached=read('catalog.json');if(cached?.cards)store.catalog=cached.cards;
+  catalogRefresh=new CatalogRefresh(cached?.fetchedAt??0,!Object.keys(store.catalog).length||needsChineseCatalog(cached)||cached?.reportStyleVersion!==1||!Object.values(store.catalog).some(c=>c.password&&c.category));
   const area=screen.getPrimaryDisplay().workArea;
   win=new BrowserWindow({width:Math.min(config.width,area.width),height:Math.min(config.height,area.height),minWidth:300,minHeight:100,x:area.x+area.width-Math.min(config.width,area.width),y:area.y,frame:false,backgroundColor:'#1e2228',title:'MD助手 · 信息侧栏',show:false,alwaysOnTop:false,
     webPreferences:{preload:fileURLToPath(new URL('./preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});
@@ -142,6 +152,7 @@ app.whenReady().then(async()=>{
       }
     }
     store.accept(s);
+    autoUpdateCatalog();
     if(s.deck&&validateDeck(s.deck)){
       const signature=JSON.stringify({...s.deck,readAt:0});
       if(signature!==lastDeckSaved){
@@ -164,7 +175,7 @@ app.whenReady().then(async()=>{
     try{
       if((event.sender!==win.webContents&&!overlay?.accepts(event.sender))||!Number.isInteger(id))throw Error('无效来源或卡片编号');
       const view=store.view(),hand=view.publicHand;
-      if(![...hand.cards,...hand.uncertainCards].some(c=>c.id===id)&&!view.backrow.cards.some(c=>c.candidates.includes(id)))throw Error('这张卡已不在公开记录中');
+      if(![...hand.cards,...hand.uncertainCards].some(c=>c.id===id)&&view.publicDeckTop!==id&&!view.backrow.cards.some(c=>c.candidates.includes(id)))throw Error('这张卡已不在公开记录中');
       if(process.env.MD_TEST_MODE==='1'){
         if(!testDetails[id])throw Error('测试资料不可用');
         return {ok:true,detail:testDetails[id]};
@@ -231,7 +242,7 @@ app.whenReady().then(async()=>{
   syncSidebar();await showSettings();
   if(config.launchUntapped)void launchUntapped();
   begin();setInterval(publish,500).unref();
-  if((!Object.keys(store.catalog).length||needsChineseCatalog(cached)||cached?.reportStyleVersion!==1||!Object.values(store.catalog).some(c=>c.password&&c.category))&&process.env.MD_TEST_MODE!=='1')void updateCatalog();
+  autoUpdateCatalog();setInterval(autoUpdateCatalog,60_000).unref();
 });
 app.on('window-all-closed',()=>{host?.stop();app.quit();});
 app.on('activate',showMain);

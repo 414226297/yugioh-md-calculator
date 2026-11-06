@@ -21,10 +21,10 @@ export class DuelStore {
       const observation=s.publicHandObservation;
       if(observation&&s.counts.opponentHand!==null){
         // Unrelated field/turn animations must not toggle hand certainty.
-        const signature=JSON.stringify([s.counts.opponentHand,[...observation.cards].sort((a,b)=>a-b),observation.changes,s.opponentSetSlots]);
+        const signature=JSON.stringify([s.counts.opponentHand,[...observation.cards].sort((a,b)=>a-b),observation.changes,s.opponentSetSlots,observation.drawState]);
         const publicHandBusy=!!s.busy&&signature!==this.handSignature;
         this.handSignature=signature;
-        const publicHandEvents=this.publicHands.update(s.session,s.logLength,s.counts.opponentHand,observation.cards,observation.changes,s.timestamp,!publicHandBusy,s.opponentSetSlots,this.catalog,!s.busy);
+        const publicHandEvents=this.publicHands.update(s.session,s.logLength,s.counts.opponentHand,observation.cards,observation.changes,s.timestamp,!publicHandBusy,s.opponentSetSlots,this.catalog,!s.busy,observation.drawState);
         s={...s,publicHandBusy:publicHandBusy||this.publicHands.pending,publicHandEvents};
       }
       if(s.publicHandEvents)this.publicHandMemory=this.publicHands.pending?{...s,counts:{...s.counts,opponentHand:this.publicHands.committedHandCount}}:s;
@@ -90,6 +90,7 @@ export class DuelStore {
     const result=blocked?{status:'uncertain' as const,plans:[],reason:this.error||(this.paused?'读取已暂停':stale?'数据过期，等待更新':s?.status==='waiting'?'等待 MD 启动':s?.status!=='duel'?'等待进入对局':missing?'卡片属性尚未获取完整':this.boundSession!==s?.session?'请确认本次使用的牌组':'场面处理中，等待稳定')}:solve(counts,monsters,inventory,this.catalog);
     const handSnapshot=this.publicHandMemory??s;
     const backrow={publicSlots:this.overlayMemory?.opponentPublicSlots??[],count:this.overlayMemory?this.publicHands.setCards().length:null,cards:this.publicHands.setCards(),uncertain:stale||!s?.publicHandObservation||!!s.publicHandBusy||s.opponentSetSlots===undefined};
-    return {snapshot:s,overlaySnapshot:this.overlayMemory,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,backrow,publicHand:publicHand(handSnapshot,stale||handSnapshot!==s),stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckAttributesReady:!missing,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
+    const publicDeckTop=s?.status==='duel'&&!stale&&s.publicHandObservation?this.publicHands.knownDeckTop:null;
+    return {snapshot:s,overlaySnapshot:this.overlayMemory,deck:this.deck,counts,total:countTotal(counts),monsters,inventory,result,backrow,publicDeckTop,publicHand:publicHand(handSnapshot,stale||handSnapshot!==s,this.catalog),stale,paused:this.paused,manual:Object.keys(this.overrides).length>0||!!this.monsterOverride||!!this.checkpoint,deckAttributesReady:!missing,deckReady:this.deckVerified&&!!this.deck&&!missing&&(s?.status!=='duel'||this.boundSession===s.session),catalog:this.catalog};
   }
 }

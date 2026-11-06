@@ -1,6 +1,7 @@
 import type {CardDetail} from '../data/card-detail.js';
 import type {SetCard} from '../domain/model.js';
-type Payload={kind:'tag'|'detail';source?:'hand';style?:'label'|'thumbnail';possible?:boolean;name?:string;password?:number;theme:string;width?:number;height?:number;slot?:number;label?:string;category?:string;card?:SetCard;uncertain?:boolean;candidates?:{id:number;name:string;category?:string;rarity?:string}[]};
+import {deckTopThumbnailGeometry} from '../domain/overlay-layout.js';
+type Payload={kind:'tag'|'detail';source?:'hand'|'deckTop';style?:'label'|'thumbnail';possible?:boolean;name?:string;password?:number;theme:string;width?:number;height?:number;slot?:number;label?:string;category?:string;card?:SetCard;uncertain?:boolean;candidates?:{id:number;name:string;category?:string;rarity?:string}[]};
 declare global {interface Window {overlay:{getState:()=>Promise<Payload|null>;select:(slot:number,preview?:boolean)=>Promise<void>;close:()=>Promise<void>;cardDetail:(id:number)=>Promise<{ok:boolean;detail?:CardDetail;error?:string}>;subscribe:(callback:(state:Payload)=>void)=>()=>void}}}
 const api=window.overlay,root=document.querySelector<HTMLElement>('#overlay')!;
 let data:Payload|null=null,signature='',request=0,selected=0;
@@ -39,11 +40,17 @@ function render(next:Payload|null){
  data=next;const key=JSON.stringify(next);if(key===signature)return;signature=key;request++;
  root.replaceChildren();if(!next)return;document.documentElement.dataset.theme=next.theme;
  if(next.kind==='tag'){
-  const hand=next.source==='hand',button=node('button',next.label,`tag ${next.category??''} ${hand?'hand-tag':''}`);
+  const hand=next.source==='hand',deckTop=next.source==='deckTop',button=node('button',next.label,`tag ${next.category??''} ${hand||deckTop?'hand-tag':''}`);
   button.style.width=`${next.width}px`;button.style.height=`${next.height}px`;
-  button.setAttribute('aria-label',`查看${hand?(next.possible?'手牌候选':'公开手牌'):next.possible?'盖牌候选':'盖牌'}：${next.name??next.label}`);
+  button.setAttribute('aria-label',`查看${deckTop?'对方已确认顶牌':hand?(next.possible?'手牌候选':'公开手牌'):next.possible?'盖牌候选':'盖牌'}：${next.name??next.label}`);
   button.onclick=()=>void api.select(next.slot!,hand);
   button.title=(next.possible?'可能是（依据公开信息，并未确认）：':'')+(next.name??next.label??'');
+  if(deckTop){
+   const geometry=deckTopThumbnailGeometry(next.width!,next.height!);
+   button.classList.add('deck-top-tag');button.style.width=`${geometry.width}px`;button.style.height=`${geometry.height}px`;
+   button.style.transform=`translate(-50%,-50%) ${geometry.transform}`;
+   root.style.position='relative';root.style.width=`${next.width}px`;root.style.height=`${next.height}px`;
+  }
   if(next.style==='thumbnail'){
    button.classList.add('thumbnail-tag');
    const fallback=node('span',next.name??next.label??'卡图暂不可用','hand-fallback');

@@ -10,12 +10,15 @@ export interface Move { key: string; index: number; action: number; cardId: numb
 /** Public display observations and sanitized log evidence; no hidden hand identities. */
 export type PublicHandEvent = { key:string; index:number } & (
   { type:'reveal'; cards:number[]; full?:boolean } |
-  { type:'enter'; cardId:number|null; source?:'search'; origin?:string } |
-  { type:'leave'; cardId:number|null } |
+  { type:'enter'; cardId:number|null; source?:'search'|'draw'; origin?:string } |
+  { type:'leave'; cardId:number|null; normalSet?:boolean } |
   { type:'invalidate' }
 );
-export interface HandChange {key:string;index:number;type:'enter'|'leave'|'handReveal'|'invalidate'|'fieldReveal'|'fieldLeave'|'fieldSet'|'fieldConfirm';scope?:'hand';cardId?:number;slot?:number;source?:'search';drawKey?:string}
+// deckTop requires explicit public proof of the FINAL top position (not merely
+// an excavated card). deckReset covers shuffle, reorder and unknown deck moves.
+export interface HandChange {key:string;index:number;type:'enter'|'leave'|'handReveal'|'invalidate'|'fieldReveal'|'fieldLeave'|'fieldSet'|'fieldConfirm'|'deckTop'|'deckReset';scope?:'hand';cardId?:number;slot?:number;source?:'search'|'draw';drawKey?:string;normalSet?:boolean;normalDrawTurn?:number}
 export interface SetCard {slot:number;candidates:number[];unknownPossible:boolean;confirmedId?:number;publicId?:number;origin?:string;searchedCandidates?:number[];positionChanged?:boolean}
+export interface PublicDrawState {deckCount:number;window?:{turnIndex:number;index:number}}
 export interface Snapshot {
   status: 'waiting' | 'menu' | 'duel' | 'error'; session: string | null; timestamp: number;
   counts: Counts; monsters: Monster[]; myTeam: number; extraCount: number | null;
@@ -33,7 +36,7 @@ export interface Snapshot {
   deckSelection?:DeckSelection|null;
   cachedPreparationDeck?:Deck;
   publicHandEvents?:PublicHandEvent[];
-  publicHandObservation?:{cards:number[];changes:HandChange[]};
+  publicHandObservation?:{cards:number[];changes:HandChange[];drawState?:PublicDrawState};
 }
 export interface Inventory { extra: Stock[]; banished: Stock[]; quality: Quality; reasons: string[] }
 export interface Plan { rank: number; level: number; targetKind: 'level' | 'rank'; target: number; returnRank: number; returnLevel: number; usesPrevious: boolean }

@@ -3,13 +3,13 @@ import {BrowserWindow,screen,ipcMain,type WebContents} from 'electron';
 import {fileURLToPath} from 'node:url';
 import type {DuelStore} from '../domain/store.js';
 import type {Config} from './config.js';
-import {overlayBounds,handOverlayBounds,handOverlayEntries,overlayDetailBounds,clipOverlayRegions,backrowOverlayPreview,type Bounds} from '../domain/overlay-layout.js';
+import {overlayBounds,handOverlayBounds,handOverlayEntries,overlayDetailBounds,clipOverlayRegions,backrowOverlayPreview,deckTopOverlayBounds,deckTopOverlayRegions,type Bounds} from '../domain/overlay-layout.js';
 import {WindowTracker,type GameWindow} from './window-tracker.js';
 import {moduleOverlayBounds} from '../domain/overlay-layout.js';
 import {validateModules,type ModuleId} from '../domain/modules.js';
 import {renderSidebar} from '../ui/sidebar.js';
 type View=ReturnType<DuelStore['view']>;
-type Entry={window:BrowserWindow;ready:boolean;signature:string;data:unknown};
+type Entry={window:BrowserWindow;ready:boolean;signature:string;data:unknown;shapeSignature?:string};
 export class CardOverlay {
  private entries=new Map<number,Entry>();
  private frame:GameWindow={active:false};private frameAt=0;
@@ -69,7 +69,7 @@ export class CardOverlay {
  }
  private ensure(key:number):Entry {
   const old=this.entries.get(key);if(old)return old;
-  const window=new BrowserWindow({show:false,frame:false,transparent:true,backgroundColor:'#00000000',focusable:false,skipTaskbar:true,alwaysOnTop:true,resizable:false,movable:false,hasShadow:false,width:50,height:20,minWidth:1,minHeight:1,title:'MD助手 · 盖牌',webPreferences:{preload:fileURLToPath(new URL('./overlay-preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  const window=new BrowserWindow({show:false,frame:false,transparent:true,backgroundColor:'#00000000',focusable:false,skipTaskbar:true,alwaysOnTop:true,resizable:false,movable:false,hasShadow:false,width:50,height:20,minWidth:1,minHeight:1,title:key===102?'MD助手 · 顶牌':'MD助手 · 盖牌',webPreferences:{preload:fileURLToPath(new URL('./overlay-preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   window.setAlwaysOnTop(true,'pop-up-menu');window.setMenu(null);
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',e=>e.preventDefault());
   const entry:Entry={window,ready:false,signature:'',data:null};this.entries.set(key,entry);
@@ -100,6 +100,9 @@ export class CardOverlay {
   }else if(key===101){
    const regions=clipOverlayRegions(dip.width,dip.height,this.preparationRegions);
    entry.window.setShape(regions.length?regions:[{x:0,y:0,width:Math.ceil(dip.width*32/202),height:Math.ceil(dip.width*32/210)}]);
+  }else if(key===102){
+   const shapeSignature=`${dip.width}:${dip.height}`;
+   if(entry.shapeSignature!==shapeSignature){entry.window.setShape(deckTopOverlayRegions(dip.width,dip.height));entry.shapeSignature=shapeSignature;}
   }else if(key!==0)entry.window.setShape([{x:0,y:0,width:dip.width,height:dip.height}]);
   if(!entry.ready)return;
   const signature=JSON.stringify(data);
@@ -141,17 +144,23 @@ export class CardOverlay {
       handIndex++;
     }
    }
-   let chosen=[...cards,...handCards].find(c=>c.slot===this.selected);
+   const topId=view.publicDeckTop,topBounds=topId&&handEnabled?deckTopOverlayBounds(client):null;
+   const topCard=topId&&topBounds?{slot:102,candidates:[topId],confirmedId:topId,unknownPossible:false}:undefined;
+   if(topCard&&topBounds){
+    const card=view.catalog[topId!],category=card?.category;
+    active.add(102);this.place(102,topBounds,{kind:'tag',source:'deckTop',style:'thumbnail',slot:102,theme:config.theme,category,name:card?.name,password:card?.password});
+   }
+   let chosen=[...cards,...handCards,...(topCard?[topCard]:[])].find(c=>c.slot===this.selected);
    if(this.moduleDetail){
     const {id,slot}=this.moduleDetail;
     if(slot!==undefined)chosen=view.backrow.cards.find(c=>c.slot===slot);
-    else if(view.publicHand.cards.some(c=>c.id===id))chosen={slot:-1,candidates:[id!],confirmedId:id,unknownPossible:false};
+    else if(view.publicDeckTop===id||view.publicHand.cards.some(c=>c.id===id))chosen={slot:-1,candidates:[id!],confirmedId:id,unknownPossible:false};
     else if(view.publicHand.uncertainCards.some(c=>c.id===id))chosen={slot:-1,candidates:[id!],unknownPossible:true};
     else chosen=view.backrow.cards.find(c=>c.candidates.includes(id!));
     if(!chosen)this.moduleDetail=null;
    }
    if(chosen&&(active.has(chosen.slot)||this.moduleDetail)){
-    active.add(0);this.place(0,overlayDetailBounds(client),{kind:'detail',theme:config.theme,card:chosen,uncertain:!chosen.confirmedId||(chosen.slot>=7&&view.backrow.uncertain),candidates:chosen.candidates.map(id=>({id,name:view.catalog[id]?.name??`卡片 ${id}`,category:view.catalog[id]?.category,rarity:view.catalog[id]?.rarity}))});
+    active.add(0);this.place(0,overlayDetailBounds(client),{kind:'detail',theme:config.theme,card:chosen,uncertain:!chosen.confirmedId||(chosen.slot>=7&&chosen.slot<=11&&view.backrow.uncertain),candidates:chosen.candidates.map(id=>({id,name:view.catalog[id]?.name??`卡片 ${id}`,category:view.catalog[id]?.category,rarity:view.catalog[id]?.rarity}))});
    }else this.selected=null;
   }else {this.selected=null;this.moduleDetail=null;}
   for(const [key,entry] of this.entries)if(!active.has(key)&&!entry.window.isDestroyed()){

@@ -2,7 +2,7 @@ import type {HandChange} from '../domain/model.js';
 import type {Ref} from './collections.js';
 export type {HandChange} from '../domain/model.js';
 export {PublicHandTracker} from '../domain/public-hand-tracker.js';
-const movement=new Set([2,3,4,5,6,7,8,9,13,14,15,18,20,21,22,24,25,26,27,28,29,33,34,35,36,39,49,50,51]);
+const movement=new Set([2,3,4,5,6,7,8,9,13,14,15,18,20,21,22,24,25,26,27,28,29,33,34,35,36,39,46,47,48,49,50,51,52]);
 const stationary=new Set([0,10,11,12,16,17,19,23,30,31,32,37,38,40]);
 
 /** Read no identity at all unless the game's hand-display flag is explicitly open. */
@@ -26,8 +26,18 @@ function publicCardName(name?:Ref):number|undefined {
   return Number.isInteger(id)&&id>0&&id<=65535?id:undefined;
 }
 
+/** A resolved hand-to-grave movement makes this individual card public, even
+ * inside a multi-card fusion-material batch with no separate name rows.
+ * Never call this for a hidden destination, deck card, or mere selection. */
+function graveDepartureName(left:Ref):number|undefined {
+  const packed=left.get('dataint');
+  if(!Number.isInteger(packed)||packed< -2147483648||packed>4294967295)return;
+  const id=packed&65535;
+  return id>0?id:undefined;
+}
+
 /** Decode zone transitions once for all movement actions, independent of effects. */
-export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicName?:Ref,priorDraw?:{key:string;action:Ref}):HandChange[]{
+export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicName?:Ref,priorDraw?:{key:string;action:Ref},effectActive=true):HandChange[]{
   const l=a.get('datal'),m=a.get('datac'),r=a.get('datar'),key=`${index}:${sub}`;
   const action=m.get('databyte1'),from=l.get('databyte0'),player=l.get('databyte1');
   const rightType=r.get('datatype'),to=rightType===1?r.get('databyte0'):null;
@@ -36,7 +46,7 @@ export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicNam
   const scope=from>=13&&(to===null||to>=13)?{scope:'hand' as const}:{};
   if(m.get('datatype')!==3||l.get('datatype')!==1)return leaves||enters?[{key,index,type:'invalidate',...scope}]:[];
   // Draw encodes destination on the left; no hidden draw identity is read.
-  if(action===1)return player===opponent?[{key,index,type:'enter'}]:[];
+  if(action===1)return player===opponent?[{key,index,type:'enter',source:'draw'}]:[];
   // Public hand disclosure is a log event even when its visual display was
   // too brief to sample. It identifies a card; it is not another draw.
   if(action===31&&leaves&&to===null){
@@ -49,6 +59,12 @@ export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicNam
   const activationLeaves=action===11&&leaves&&destination&&to!<=12;
   const moved=destination&&(movement.has(action)||activationLeaves);
   const field:HandChange[]=[];
+  // Track monster-zone occupancy using public moves, never hidden card IDs.
+  if(moved&&target===opponent&&to!>=0&&to!<=6&&!leaves&&(player!==target||from!==to))field.push({key:`${key}:occupy`,index,type:'fieldSet',slot:to!});
+  if(player===opponent&&from>=0&&from<=6&&moved&&(to!==from||target!==player)){
+    const id=publicCardName(publicName);
+    field.push({key:`${key}:monster`,index,type:id===undefined?'fieldLeave':'fieldReveal',slot:from,...(id===undefined?{}:{cardId:id})});
+  }
   // Confirmation discloses a card at its existing location; it does not leave.
   if(action===17&&player===opponent&&from>=7&&from<=11){
     const id=publicCardName(publicName);
@@ -66,8 +82,12 @@ export function handChange(a:Ref,index:number,sub:number,myTeam:number,publicNam
   if(stationary.has(action)&&!activationLeaves)return field;
   if(!moved)return [...field,{key,index,type:'invalidate',...scope}];
   if(leaves&&enters)return [...field,{key,index,type:'invalidate',...scope}];
-  const id=publicCardName(publicName);
-  return [...field,{key,index,type:leaves?'leave':'enter',...(id===undefined?{}:{cardId:id}),...(enters&&from===15&&action===26&&id!==undefined?{source:'search' as const}:{}),...(leaves&&(action===13||action===14)&&target===opponent&&to!>=7&&to!<=11?{slot:to!}:{})}];
+  const id=publicCardName(publicName)??(leaves&&to===16?graveDepartureName(l):undefined);
+  // Ordinary vertical sets were observed with center flags 65/97; indented
+  // effect movements use 81/113. A separator alone cannot prove a normal set.
+  const flags=action===14?m.get('boolbits'):undefined;
+  const normalSet=leaves&&action===14&&!effectActive&&(flags===65||flags===97)&&target===opponent&&to!>=7&&to!<=11;
+  return [...field,{key,index,type:leaves?'leave':'enter',...(id===undefined?{}:{cardId:id}),...(enters&&from===15&&action===26&&id!==undefined?{source:'search' as const}:{}),...(normalSet?{normalSet:true}:{}),...(leaves&&(action===13||action===14)&&target===opponent&&to!>=0&&to!<=11?{slot:to!}:{})}];
 }
 /** Read only location/team/face flags, never the identity of a set card. */
 function backrowSlots(cards:Ref[],myTeam:number,faceUp:boolean):number[]{

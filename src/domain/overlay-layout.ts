@@ -13,6 +13,46 @@ export function handOverlayEntries(hand:PublicHandView,count:number){
  return entries;
 }
 export interface Bounds {x:number;y:number;width:number;height:number}
+// Center calibrated from the user's live deck crop in the 1366×768 viewport.
+// Keep the hand thumbnail size, aligned with the sloping deck sleeve.
+const deckAngle=-20*Math.PI/180,deckCos=Math.cos(deckAngle),deckSin=Math.sin(deckAngle);
+const deckWidth=46,deckHeight=67,deckDepth=.94;
+const deckBoxWidth=deckWidth*deckCos-deckHeight*deckDepth*deckSin;
+const deckBoxHeight=-deckWidth*deckSin+deckHeight*deckDepth*deckCos;
+export function deckTopOverlayBounds(client:Bounds):Bounds|null {
+ if(!Object.values(client).every(Number.isFinite)||client.width<480||client.height<270)return null;
+ const width=Math.min(client.width,client.height*16/9),height=width*9/16;
+ const left=client.x+(client.width-width)/2,top=client.y+(client.height-height)/2;
+ return {x:Math.round(left+width*(326-deckBoxWidth/2)/1366),y:Math.round(top+height*(39-deckBoxHeight/2)/768),width:Math.max(1,Math.round(width*deckBoxWidth/1366)),height:Math.max(1,Math.round(height*deckBoxHeight/768))};
+}
+/** Same affine geometry drives both renderer paint and native mouse clipping. */
+export function deckTopThumbnailGeometry(width:number,height:number){
+ const cardWidth=width*deckWidth/deckBoxWidth,cardHeight=height*deckHeight/deckBoxHeight;
+ // Account for independent pixel rounding / DPI conversion of the outer box.
+ const a=deckCos,b=deckSin*(height/deckBoxHeight)/(width/deckBoxWidth);
+ const c=-deckSin*deckDepth*(width/deckBoxWidth)/(height/deckBoxHeight),d=deckCos*deckDepth;
+ const polygon=[[-.5,-.5],[.5,-.5],[.5,.5],[-.5,.5]].map(([x,y])=>({x:width/2+a*x*cardWidth+c*y*cardHeight,y:height/2+b*x*cardWidth+d*y*cardHeight}));
+ return {width:cardWidth,height:cardHeight,transform:`matrix(${a},${b},${c},${d},0,0)`,polygon};
+}
+/** Transparent corners must pass clicks to the game instead of stealing them. */
+export function deckTopOverlayRegions(width:number,height:number):Bounds[]{
+ if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1)return [];
+ const {polygon}=deckTopThumbnailGeometry(width,height),regions:Bounds[]=[];
+ for(let y=0;y<height;y++){
+  const cuts:number[]=[],scan=y+.5;
+  for(let i=0;i<polygon.length;i++){
+   const p=polygon[i],q=polygon[(i+1)%polygon.length];
+   if(scan>=Math.min(p.y,q.y)&&scan<Math.max(p.y,q.y))cuts.push(p.x+(scan-p.y)*(q.x-p.x)/(q.y-p.y));
+  }
+  if(cuts.length<2)continue;
+  const x=Math.max(0,Math.floor(Math.min(...cuts))),right=Math.min(width,Math.ceil(Math.max(...cuts)));
+  if(right<=x)continue;
+  const last=regions.at(-1);
+  if(last&&last.x===x&&last.width===right-x&&last.y+last.height===y)last.height++;
+  else regions.push({x,y,width:right-x,height:1});
+ }
+ return regions;
+}
 /** Lower-left tab at the marked area, with room to grow upward within the card report. */
 export function moduleOverlayBounds(client:Bounds):Bounds {
  const width=Math.min(client.width,client.height*16/9),height=width*9/16;

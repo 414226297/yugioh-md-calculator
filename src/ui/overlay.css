@@ -47,3 +47,4 @@
 .tag.thumbnail-tag{position:relative;overflow:hidden;padding:1px;border-radius:3px;background:#101b29;white-space:normal}.hand-thumbnail{position:absolute;inset:1px;width:calc(100% - 2px);height:calc(100% - 2px);object-fit:contain;display:block}.hand-fallback{font-size:clamp(7px,20vw,11px);line-height:1.25;padding:2px;overflow-wrap:anywhere}.hand-fallback[hidden]{display:none}
 
 .tag.possible-card{border-color:#efc469;border-style:dashed}.candidate-caption{position:absolute;z-index:1;bottom:1px;left:1px;right:1px;padding:2px 0;background:#2b210deb;color:#ffe3a0;font-size:clamp(8px,22vw,12px);line-height:1.1;text-align:center;pointer-events:none}
+.tag.thumbnail-tag.deck-top-tag{position:absolute;left:50%;top:50%;transform-origin:center}

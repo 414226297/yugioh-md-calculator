@@ -1,4 +1,4 @@
-import type {Snapshot} from './model.js';
+import type {Card,Snapshot} from './model.js';
 
 export interface PublicHandView {
   cards:{id:number;count:number}[];
@@ -8,7 +8,7 @@ export interface PublicHandView {
 }
 
 /** Keep confirmed quantities separate from disclosures whose whereabouts are uncertain. */
-export function publicHand(snapshot:Snapshot|null,stale=false):PublicHandView {
+export function publicHand(snapshot:Snapshot|null,stale=false,catalog:Record<number,Card>={}):PublicHandView {
   const empty=(reason:string):PublicHandView=>({cards:[],uncertainCards:[],status:'unavailable',reason});
   if(snapshot?.status!=='duel'||!snapshot.session)return empty('进入对局后记录公开手牌');
   if(!snapshot.publicHandEvents)return empty('公开手牌读取待确认');
@@ -42,7 +42,10 @@ export function publicHand(snapshot:Snapshot|null,stale=false):PublicHandView {
         else{
           // An unidentified departure could be any known card. Keep only
           // copies which must remain regardless of which identity departed.
-          for(const value of known.values())value.min=Math.max(0,value.min-1);
+          for(const [id,value] of known){
+            if(event.normalSet&&(catalog[id]?.category==='monster'||catalog[id]?.fieldSpell))continue;
+            value.min=Math.max(0,value.min-1);
+          }
           partial=true;
         }
         break;

@@ -110,7 +110,9 @@ test('an old effect name cannot leak across separators or be assigned to multipl
 });
 test('field-to-material movements following a summon do not remove another hand copy',()=>{
  const data=readActions(log([{name:12305},{action:action(3,13,3,7)},{name:12305},{action:action(28,3,5,133)},{name:12305},{action:action(30,18,null)}]),0);
- assert.equal(data.handChanges.length,1);assert.equal(data.handChanges[0].cardId,12305);
+ const departures=data.handChanges.filter(c=>c.type==='leave');
+ assert.equal(departures.length,1);assert.equal(departures[0].cardId,12305);
+ assert.equal(data.handChanges.filter(c=>c.type==='fieldReveal').length,1);
 });
 
 test('recorded chain return and hand-to-material sequence adds and removes the exact public card',()=>{
@@ -118,7 +120,7 @@ test('recorded chain return and hand-to-material sequence adds and removes the e
  const rows=[{label:'ShowChain'},{name:12305},{action:returned}];
  const tracker=new PublicHandTracker();tracker.update('chain',1,1,[100],[],0);
  let changes=readActions(log(rows),0).handChanges;
- assert.deepEqual(changes,[{key:'2:0',index:2,type:'enter',cardId:12305}]);
+ assert.deepEqual(changes,[{key:'2:0:monster',index:2,type:'fieldReveal',slot:3,cardId:12305},{key:'2:0',index:2,type:'enter',cardId:12305}]);
  assert.deepEqual(view(tracker.update('chain',3,2,[],changes,1),2).cards,[{id:100,count:1},{id:12305,count:1}]);
  rows.push({name:12336},{action:action(11,12,null)},{label:'ShowChain'},{name:12305},{action:action(28,13,5,133)});
  changes=readActions(log(rows),0).handChanges;
