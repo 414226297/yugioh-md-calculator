@@ -145,7 +145,7 @@ export class PublicHandTracker {
       this.sets.clear();
       this.setHistories.clear();this.setCounts.clear();
     }
-    if(fresh||broken){
+    if(broken){
       // Reconstruct only explicit public field evidence, never past hand guesses.
       for(const change of changes){
         if(change.type==='invalidate'){if(change.scope!=='hand')this.sets.clear();}
@@ -163,18 +163,24 @@ export class PublicHandTracker {
         else if(change.type==='leave'){
           const key=`observed:${this.serial++}`;
           this.events.push({key,index:change.index,type:'leave',cardId:change.cardId??null,...(change.normalSet?{normalSet:true}:{})});
-          if(change.slot!==undefined&&change.slot<7)this.sets.set(change.slot,{slot:change.slot,candidates:[],unknownPossible:true,origin:key});
+          if(change.slot!==undefined){
+            this.recordField(change);
+            this.sets.get(change.slot)!.origin=key;
+          }
         }
-        else if(change.slot!==undefined&&change.slot<7){
+        else if(change.slot!==undefined){
           if(change.type==='fieldReveal')this.recordField({...change,type:'fieldConfirm'});
           if(change.type==='fieldReveal'||change.type==='fieldLeave')this.sets.delete(change.slot);
-          else if(change.type==='fieldSet')this.recordField(change);
+          else if(change.type==='fieldSet'||change.type==='fieldConfirm')this.recordField(change);
         }
-        else if(change.type==='invalidate')this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'invalidate'});
+        else if(change.type==='invalidate'){
+          if(change.scope!=='hand')this.sets.clear();
+          this.events.push({key:`observed:${this.serial++}`,index:change.index,type:'invalidate'});
+        }
       }
     }
     if(!fresh&&!broken){
-      const added=changes.filter(c=>c.index>=this.cursor);
+      const added=addedChanges;
       const coherent=expectedCount===count&&!added.some(c=>c.type==='invalidate');
       let expected=this.count;
       for(const change of added){
@@ -217,9 +223,9 @@ export class PublicHandTracker {
           if(change.slot!==undefined){
             const inference=change.slot<7?{candidates:[],unknownPossible:true,searchedCandidates:[]}:this.candidates(this.events,expected,logLength,catalog,change.normalSet);
             const {candidates}=inference,unknownPossible=!coherent||inference.unknownPossible;
-            if(!unknownPossible&&candidates.length===1)identity=candidates[0];
+            if(identity===undefined&&!unknownPossible&&candidates.length===1)identity=candidates[0];
             this.sets.set(change.slot,{slot:change.slot,candidates:change.cardId!==undefined?[change.cardId]:candidates,unknownPossible:change.cardId!==undefined?false:unknownPossible,searchedCandidates:inference.searchedCandidates,...(identity?{confirmedId:identity}:{}),...(change.cardId!==undefined?{publicId:change.cardId}:{}),origin:eventKey});
-            this.setCounts.set(eventKey,expected);
+            if(change.slot>=7&&coherent)this.setCounts.set(eventKey,expected);
             this.setHistories.set(eventKey,this.events);
           }
           expected--;

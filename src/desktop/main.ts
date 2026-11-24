@@ -6,7 +6,7 @@ import {app,BrowserWindow,dialog,ipcMain,screen,Tray,Menu,nativeImage} from 'ele
 import path from 'node:path';import {fileURLToPath} from 'node:url';
 import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:fs';
 import {DuelStore} from '../domain/store.js';import {validateDeck,type Snapshot} from '../domain/model.js';
-import {downloadCatalog,needsChineseCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,updateDisplayConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
+import {downloadCatalog,needsChineseCatalog,readCachedCatalog} from '../data/download-catalog.js';import {ReaderHost} from './reader-host.js';import {defaults,validateConfig,updateDisplayConfig,resolveModulePath,dataDirectory,redactLocalPaths} from './config.js';
 import {fetchCatalogResponse} from './catalog-fetch.js';
 import {CatalogRefresh,missingCatalogCards} from '../data/catalog-refresh.js';
 import {downloadCardDetail,type CardDetail} from '../data/card-detail.js';
@@ -101,15 +101,17 @@ async function updateCatalog(){
 }
 function autoUpdateCatalog(){
   if(process.env.MD_TEST_MODE==='1'||downloading)return;
-  if(catalogRefresh.due(Date.now(),missingCatalogCards(store.catalog,store.deck,store.snapshot)))void updateCatalog();
+  if(catalogRefresh.due(Date.now(),()=>missingCatalogCards(store.catalog,store.deck,store.snapshot)))void updateCatalog();
 }
 app.whenReady().then(async()=>{
   if(!singleInstance)return;
   try{config=validateConfig({...config,...read('config.json')});}catch{notice='设置文件无效，已使用默认设置';}
   const cachedDeck=read('deck.json');if(cachedDeck&&validateDeck(cachedDeck))store.deck=cachedDeck;
   const cachedDecks=read('decks.json');if(cachedDecks&&typeof cachedDecks==='object'&&!Array.isArray(cachedDecks))knownDecks=cachedDecks;
-  const cached=read('catalog.json');if(cached?.cards)store.catalog=cached.cards;
-  catalogRefresh=new CatalogRefresh(cached?.fetchedAt??0,!Object.keys(store.catalog).length||needsChineseCatalog(cached)||cached?.reportStyleVersion!==1||!Object.values(store.catalog).some(c=>c.password&&c.category));
+  const cached=read('catalog.json');
+  const {cards,damaged}=readCachedCatalog(cached?.cards);
+  store.catalog=cards;
+  catalogRefresh=new CatalogRefresh(cached?.fetchedAt??0,damaged||!Object.keys(cards).length||needsChineseCatalog(cached)||cached?.reportStyleVersion!==1||!Object.values(cards).some(c=>c.password&&c.category));
   const area=screen.getPrimaryDisplay().workArea;
   win=new BrowserWindow({width:Math.min(config.width,area.width),height:Math.min(config.height,area.height),minWidth:300,minHeight:100,x:area.x+area.width-Math.min(config.width,area.width),y:area.y,frame:false,backgroundColor:'#1e2228',title:'MD助手 · 信息侧栏',show:false,alwaysOnTop:false,
     webPreferences:{preload:fileURLToPath(new URL('./preload.cjs',import.meta.url)),contextIsolation:true,nodeIntegration:false,sandbox:true}});

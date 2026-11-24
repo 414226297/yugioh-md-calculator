@@ -12,6 +12,29 @@ const reveal={key:'12:0:field',index:12,type:'fieldReveal',slot:9,cardId:100};
 const view=(events,count)=>publicHand({...scene(),logLength:100,counts:{...scene().counts,opponentHand:count},publicHandEvents:events});
 const update=(t,len,count,visible,changes,slots)=>t.update('a',len,count,visible,changes,0,true,slots,catalog);
 
+test('attaching mid-duel links a public backrow reveal to the original departure',()=>{
+ const changes=[
+  {key:'1',index:1,type:'enter',cardId:100},
+  {key:'2',index:2,type:'enter',cardId:200},
+  set,reveal
+ ];
+ for(const split of [false,true]){
+  const t=new PublicHandTracker();
+  if(split)update(t,11,1,[],changes.slice(0,-1),[9]);
+  const events=update(t,13,1,[],changes,[]);
+  assert.deepEqual(view(events,1).cards,[{id:200,count:1}]);
+  assert.deepEqual(view(events,1).uncertainCards,[]);
+ }
+});
+
+test('a public set identity outranks a contradictory hand estimate',()=>{
+ const t=new PublicHandTracker();
+ update(t,10,2,[100,100],[],[]);
+ const events=update(t,11,1,[],[{...set,cardId:200}],undefined);
+ assert.equal(events.find(e=>e.type==='leave').cardId,200);
+ assert.equal(t.setCards()[0].confirmedId,200);
+});
+
 test('field spells cannot be inferred into backrow and remain in hand after another card is set',()=>{
  const t=new PublicHandTracker();
  const cards={...catalog,200:{...catalog[200],fieldSpell:true}};

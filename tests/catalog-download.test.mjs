@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {downloadCatalog,catalogURL,needsChineseCatalog} from '../dist/data/download-catalog.js';
+import {downloadCatalog,catalogURL,needsChineseCatalog,readCachedCatalog} from '../dist/data/download-catalog.js';
+test('damaged catalog entries trigger repair while usable offline cards survive',()=>{
+ const card={id:20,name:'测试卡',kind:'other',value:0};
+ const raw={20:card,21:null,22:card};
+ assert.equal(needsChineseCatalog({source:catalogURL,cards:raw}),true);
+ assert.deepEqual(readCachedCatalog(raw),{cards:{20:card},damaged:true});
+ assert.deepEqual(readCachedCatalog({20:card}),{cards:{20:card},damaged:false});
+ assert.deepEqual(readCachedCatalog([card]),{cards:{},damaged:true});
+});
 import {parseCatalog} from '../dist/data/catalog.js';
 test('field subtype is preserved and old spell caches are refreshed',()=>{
  const cards=parseCatalog([{id:4338,name:'山',kind:13,spell_type:2},{id:4837,name:'融合',kind:13,spell_type:null}]);

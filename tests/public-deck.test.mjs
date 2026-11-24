@@ -66,6 +66,33 @@ test('observed Cue log structure proves only the remaining top card', () => {
   assert.deepEqual(result.events.filter(e => e.type === 'enter').map(e => [e.cardId, e.source]), [[200, 'draw']]);
 });
 
+test('Soul Servant public deck selection is retained across the separator and consumed once on draw', () => {
+  for (const myTeam of [0, 1]) {
+    const opponent = 1 - myTeam;
+    const chain = {chain: {type: 1, cardid: 14907, team: false}};
+    const reveal = {action: move(19, 15, opponent)};
+    const rows = [chain, {name: 11121}, reveal, {label: 'SeparateLine'}];
+    const first = readActionsIncremental(log(rows.slice(0, 2)), myTeam, 'servant', null, table);
+    const next = readActionsIncremental(log(rows), myTeam, 'servant', first.history, table);
+    const expected = [{key: '2:0:deck', index: 2, type: 'deckTop', cardId: 11121}];
+    assert.deepEqual(next.result.handChanges, expected);
+    assert.deepEqual(readActions(log(rows), myTeam, table).handChanges, expected);
+    const tracker = new PublicHandTracker();
+    tracker.update('servant', rows.length, 0, [], expected, 1);
+    assert.equal(tracker.knownDeckTop, 11121);
+    const afterDraw = [...rows, draw(opponent), draw(opponent)];
+    const decoded = readActions(log(afterDraw), myTeam, table).handChanges;
+    const events = tracker.update('servant', afterDraw.length, 2, [], decoded, 2);
+    assert.equal(tracker.knownDeckTop, null);
+    assert.deepEqual(view(events, 2, afterDraw.length).cards, [{id: 11121, count: 1}]);
+    for (const insufficient of [[chain, reveal], [{...chain, chain: {...chain.chain, type: 0}}, ...rows.slice(1)],
+      [{...chain, chain: {...chain.chain, team: true}}, ...rows.slice(1)], [chain, {label: 'SeparateLine'}, {name: 11121}, reveal]]) {
+      assert.equal(readActions(log(insufficient), myTeam, table).handChanges.some(c => c.type === 'deckTop'), false);
+    }
+    assert.equal(readActions(log([...rows, {action: move(33, 2, opponent, 15)}]), myTeam, table).handChanges.some(c => c.type === 'deckReset'), true);
+  }
+});
+
 test('boolean chain side follows the near player in either seat through the next draw', () => {
   for(const myTeam of [0,1]){
     const rows=cue(14627,17768,14627).map(row=>{

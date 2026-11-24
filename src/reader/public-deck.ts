@@ -6,12 +6,11 @@ import type {Ref} from './collections.js';
 // cards. They cannot reorder the OTHER main deck. Any actual deck movement
 // below still overrides this narrow whitelist; copy/apply effects are excluded.
 const ownDeckOnlyEffects=new Set([21953,21955,21957,21961,21962]);
+const soulServant=14907;
 
-/** Public-log proof for Cue only. Excavation alone proves neither the final top
- * nor a hand identity. The two disclosed cards, exact banish and TOP selection
- * must all occur in the same resolving effect. */
-export interface DeckProof {cue:boolean;revealed:number[];banished?:number;invalid:boolean;knownTop:boolean}
-export const emptyDeckProof=():DeckProof=>({cue:false,revealed:[],invalid:false,knownTop:false});
+/** Public evidence scoped to the current resolving effect. */
+export interface DeckProof {cue:boolean;soulServant:boolean;revealed:number[];banished?:number;invalid:boolean;knownTop:boolean}
+export const emptyDeckProof=():DeckProof=>({cue:false,soulServant:false,revealed:[],invalid:false,knownTop:false});
 export class PublicDeckLog {
   state:DeckProof;
   constructor(private myTeam:number,previous?:DeckProof){this.state=previous?structuredClone(previous):emptyDeckProof();}
@@ -27,6 +26,7 @@ export class PublicDeckLog {
     const reset=this.invalidate(index);
     this.state=emptyDeckProof();
     if(chain?.get('type')===1&&chain.get('cardid')===21956&&player===this.myTeam)this.state.cue=true;
+    if(chain?.get('type')===1&&chain.get('cardid')===soulServant&&player===1-this.myTeam)this.state.soulServant=true;
     // Other effect resolutions can shuffle without a card-movement row. Until
     // that effect is modeled, discard top ordering rather than guess a draw.
     return reset;
@@ -40,6 +40,13 @@ export class PublicDeckLog {
     const touches=from===15&&player===1-this.myTeam||to===15&&target===1-this.myTeam;
     if(!touches)return [];
     const id=name?.get('cardid'),valid=Number.isInteger(id)&&id>0&&id<=65535;
+    // Observed Soul Servant deck selection: the game logs the public name
+    // followed by an action19 deck reveal, without a separate placement row.
+    if(this.state.soulServant&&!this.state.invalid&&!this.state.knownTop&&
+       from===15&&player===1-this.myTeam&&code===19&&to===null&&valid&&id!==soulServant){
+      this.state.knownTop=true;
+      return [{key:`${index}:${sub}:deck`,index,type:'deckTop',cardId:id}];
+    }
     if(this.state.cue&&from===15&&player===1-this.myTeam){
       if(code===19&&to===null&&valid&&this.state.banished===undefined&&this.state.revealed.length<2)this.state.revealed.push(id);
       else if(code===18&&to===17&&target===player&&valid&&this.state.banished===undefined&&this.state.revealed.includes(id))this.state.banished=id;

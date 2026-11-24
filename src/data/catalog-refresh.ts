@@ -6,9 +6,10 @@ export class CatalogRefresh {
   private lastAttempt:number|null=null;
   private failed=false;
   constructor(private fetchedAt=0,private invalid=false){}
-  due(now:number,missing:boolean){
-    if(this.lastAttempt!==null&&now-this.lastAttempt<hour)return false;
-    return this.failed||this.invalid||missing||!Number.isFinite(this.fetchedAt)||this.fetchedAt<=0||now<this.fetchedAt||now-this.fetchedAt>=24*hour;
+  due(now:number,missing:boolean|(()=>boolean)){
+    if(this.lastAttempt!==null&&now>=this.lastAttempt&&now-this.lastAttempt<hour)return false;
+    if(this.failed||this.invalid||!Number.isFinite(this.fetchedAt)||this.fetchedAt<=0||now<this.fetchedAt||now-this.fetchedAt>=24*hour)return true;
+    return typeof missing==='function'?missing():missing;
   }
   start(now:number){this.lastAttempt=now;}
   finish(now:number,success:boolean){this.failed=!success;if(success){this.fetchedAt=now;this.invalid=false;}}

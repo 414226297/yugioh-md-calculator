@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {CatalogRefresh,missingCatalogCards} from '../dist/data/catalog-refresh.js';
 const hour=3600000,now=100*hour;
+test('cooldown skips scanning duel history and recovers if the system clock moves back',()=>{
+  const policy=new CatalogRefresh(now);
+  policy.start(now);policy.finish(now,true);
+  const unexpectedScan=()=>{throw Error('unnecessary history scan');};
+  assert.equal(policy.due(now+1,unexpectedScan),false);
+  assert.equal(policy.due(now-hour,unexpectedScan),true);
+});
 test('fresh cache waits one day; expired, invalid and missing cards trigger refresh',()=>{
   assert.equal(new CatalogRefresh(now).due(now,false),false);
   assert.equal(new CatalogRefresh(now).due(now+24*hour,false),true);

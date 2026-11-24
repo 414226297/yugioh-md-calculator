@@ -17,11 +17,18 @@ assert.equal(info.ownedReaderBundled,true);assert.equal(info.nativeReaderBundled
 assert.ok(info.compiledFiles.every(n=>!n.includes('untapped-scry.node')));
 const app=await electron.launch({executablePath:single,args:[],env,cwd:work,timeout:30000});
 try{
- const page=await app.firstWindow();await page.waitForLoadState('domcontentloaded');
+ await app.firstWindow();
+ let page;
+ for(let attempt=0;attempt<100&&!page;attempt++){
+   page=app.windows().find(window=>window.url().includes('window=settings'));
+   if(!page)await new Promise(resolve=>setTimeout(resolve,100));
+ }
+ assert.ok(page,'便携版应打开设置主界面');
+ await page.waitForLoadState('domcontentloaded');
  assert.equal(await app.evaluate(({app})=>app.isPackaged),true);
  const state=await page.evaluate(()=>window.cannon.getState());assert.equal(state.snapshot,null);
- assert.equal(await page.locator('#public-hand .overlay-switch').innerText(),'悬浮窗');
- assert.equal(await page.locator('#opponent-backrow .overlay-switch').innerText(),'悬浮窗');
+ await page.locator('#hand-settings [data-display="handOverlayEnabled"]').waitFor();
+ await page.locator('#backrow-settings [data-display="backrowOverlayEnabled"]').waitFor();
  assert.equal(await page.evaluate(()=>typeof window.require),'undefined');
  await page.screenshot({path:path.join(work,'single-exe-startup.png')});
  console.log('PASS one EXE copied alone → automatic cached extraction → packaged Electron UI; ICU data and owned helper present; no game reads');

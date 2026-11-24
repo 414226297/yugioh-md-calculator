@@ -1,11 +1,27 @@
 import {parseCatalog} from './catalog.js';
+import type {Card} from '../domain/model.js';
 
 export const catalogURL='https://ygomjson.untapped.gg/v1/latest/zh-cn/cards.json';
 export function needsChineseCatalog(cache:unknown):boolean {
   const value=cache as {source?:unknown;cards?:unknown}|null;
-  if(!value?.cards||typeof value.source!=='string')return true;
-  if(Object.values(value.cards as Record<string,{category?:string;fieldSpell?:boolean;rarity?:string}>).some(c=>c.category==='spell'&&typeof c.fieldSpell!=='boolean'))return true;
+  if(!value?.cards||typeof value.cards!=='object'||Array.isArray(value.cards)||typeof value.source!=='string')return true;
+  if(Object.values(value.cards).some(c=>!c||typeof c!=='object'||c.category==='spell'&&typeof c.fieldSpell!=='boolean'))return true;
   try{const url=new URL(value.source);return url.hostname!=='ygomjson.untapped.gg'||!/^\/v1\/[^/]+\/zh-cn\/cards\.json$/.test(url.pathname);}catch{return true;}
+}
+export function readCachedCatalog(raw:unknown){
+  const cards:Record<number,Card>={};
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return {cards,damaged:true};
+  let damaged=false;
+  for(const [key,card] of Object.entries(raw)){
+    if(!card||!Number.isSafeInteger(card.id)||card.id<=0||String(card.id)!==key||
+       typeof card.name!=='string'||!['fusion','xyz','other'].includes(card.kind)||
+       !Number.isInteger(card.value)||card.value<0||card.value>99){
+      damaged=true;
+      continue;
+    }
+    cards[card.id]=card;
+  }
+  return {cards,damaged};
 }
 type CatalogResponse=Pick<Response,'ok'|'status'|'url'|'headers'|'json'>;
 export type CatalogFetch=(url:string,options:{redirect:'manual';signal:AbortSignal})=>Promise<CatalogResponse>;
